@@ -250,6 +250,27 @@ export const confirmTasks = async (meetingId, tasks) => {
   });
 };
 
+/**
+ * Confirm a single task and trigger n8n workflow
+ * @param {string} meetingId - The meeting ID
+ * @param {string} taskId - The task ID
+ * @param {Object} task - The updated task object
+ * @returns {Promise<{success: boolean, task: Object}>}
+ */
+export const confirmSingleTask = async (meetingId, taskId, task) => {
+  if (USE_MOCKS) {
+    await delay(MOCK_DELAY);
+    console.log('Single task confirmed:', task);
+    return { success: true, task };
+  }
+
+  // Real API call
+  return apiRequest(`/meetings/${meetingId}/tasks/${taskId}/confirm`, {
+    method: 'POST',
+    body: JSON.stringify({ task }),
+  });
+};
+
 // ============================================
 // UTILITY EXPORTS
 // ============================================
@@ -262,6 +283,7 @@ export const api = {
   getSummary,
   reExtractMeeting,
   confirmTasks,
+  confirmSingleTask,
 };
 
 export default api;

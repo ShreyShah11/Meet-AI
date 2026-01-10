@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { getSummary, confirmTasks } from '../services/api';
+import { getSummary, confirmTasks, confirmSingleTask } from '../services/api';
 
 /**
  * SummaryAndTasksPage - Displays AI-generated summary and action items
@@ -24,8 +24,9 @@ const SummaryAndTasksPage = () => {
       try {
         setIsLoading(true);
         const data = await getSummary(meetingId);
-        setSummary({ executive: data.executive, decisions: data.decisions });
-        setTasks(data.actionItems || []);
+        // Raw LLM format: { summary, tasks }
+        setSummary({ executive: data.summary, decisions: [] });
+        setTasks(data.tasks || []);
       } catch (err) {
         setError(err.message || 'Failed to load summary');
       } finally {
@@ -38,40 +39,51 @@ const SummaryAndTasksPage = () => {
   // Editing state
   const [editingTask, setEditingTask] = useState(null);
   const [isConfirming, setIsConfirming] = useState(false);
+  const [confirmingTaskId, setConfirmingTaskId] = useState(null);
 
-  // Priority configuration
+  // Priority configuration (supports both lowercase and capitalized)
   const priorityConfig = {
-    'Critical': {
-      bg: 'bg-red-600/10',
-      text: 'text-red-700 font-bold',
-      border: 'border-red-600/20'
-    },
-    'High': {
-      bg: 'bg-red-500/10',
-      text: 'text-red-500',
-      border: 'border-red-500/20'
-    },
-    'Medium': {
-      bg: 'bg-amber-500/10',
-      text: 'text-amber-500',
-      border: 'border-amber-500/20'
-    },
-    'Low': {
-      bg: 'bg-green-500/10',
-      text: 'text-green-500',
-      border: 'border-green-500/20'
-    },
-    'Unknown': {
-      bg: 'bg-gray-500/10',
-      text: 'text-gray-500',
-      border: 'border-gray-500/20'
-    }
+    'critical': { bg: 'bg-red-600/10', text: 'text-red-700 font-bold', border: 'border-red-600/20' },
+    'Critical': { bg: 'bg-red-600/10', text: 'text-red-700 font-bold', border: 'border-red-600/20' },
+    'high': { bg: 'bg-red-500/10', text: 'text-red-500', border: 'border-red-500/20' },
+    'High': { bg: 'bg-red-500/10', text: 'text-red-500', border: 'border-red-500/20' },
+    'medium': { bg: 'bg-amber-500/10', text: 'text-amber-500', border: 'border-amber-500/20' },
+    'Medium': { bg: 'bg-amber-500/10', text: 'text-amber-500', border: 'border-amber-500/20' },
+    'low': { bg: 'bg-green-500/10', text: 'text-green-500', border: 'border-green-500/20' },
+    'Low': { bg: 'bg-green-500/10', text: 'text-green-500', border: 'border-green-500/20' },
+    'unknown': { bg: 'bg-gray-500/10', text: 'text-gray-500', border: 'border-gray-500/20' },
+    'Unknown': { bg: 'bg-gray-500/10', text: 'text-gray-500', border: 'border-gray-500/20' }
+  };
+
+  // Action type badge configuration
+  const actionConfig = {
+    'jira': { bg: 'bg-blue-500/10', text: 'text-blue-500', label: 'Jira' },
+    'slack': { bg: 'bg-purple-500/10', text: 'text-purple-500', label: 'Slack' },
+    'calendar': { bg: 'bg-green-500/10', text: 'text-green-500', label: 'Calendar' },
+    'manual': { bg: 'bg-gray-500/10', text: 'text-gray-500', label: 'Manual' },
+    'other': { bg: 'bg-gray-500/10', text: 'text-gray-500', label: 'Other' }
+  };
+
+  // Helper to get owner name from raw task format
+  const getOwnerName = (task) => {
+    if (task.assignee?.name && task.assignee.name !== 'unknown') return task.assignee.name;
+    if (task.owner) return task.owner;
+    return 'Unassigned';
+  };
+
+  // Helper to get due date from raw task format
+  const getDueDate = (task) => task.due_date || task.dueDate || null;
+
+  // Helper to get confidence (raw is 0-1, display as percentage)
+  const getConfidence = (task) => {
+    if (task.confidence <= 1) return Math.round(task.confidence * 100);
+    return task.confidence;
   };
 
   // Update task field
   const updateTask = (taskId, field, value) => {
     setTasks(prev => prev.map(task =>
-      task.id === taskId ? { ...task, [field]: value } : task
+      task._id === taskId ? { ...task, [field]: value } : task
     ));
   };
 
@@ -81,16 +93,32 @@ const SummaryAndTasksPage = () => {
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   };
 
-  // Handle confirm tasks
+  // Handle confirm all tasks
   const handleConfirmTasks = async () => {
     setIsConfirming(true);
     try {
       await confirmTasks(meetingId, tasks);
-      alert('Tasks confirmed successfully!');
+      alert('All tasks confirmed successfully!');
     } catch (err) {
       alert('Failed to confirm tasks: ' + err.message);
     } finally {
       setIsConfirming(false);
+    }
+  };
+
+  // Handle confirm single task
+  const handleConfirmSingleTask = async (task) => {
+    setConfirmingTaskId(task._id);
+    try {
+      await confirmSingleTask(meetingId, task._id, task);
+      // Update local state to show confirmed
+      setTasks(prev => prev.map(t =>
+        t._id === task._id ? { ...t, confirmed: true } : t
+      ));
+    } catch (err) {
+      alert('Failed to confirm task: ' + err.message);
+    } finally {
+      setConfirmingTaskId(null);
     }
   };
 
@@ -280,7 +308,8 @@ const SummaryAndTasksPage = () => {
               <div className="space-y-3">
                 <AnimatePresence>
                   {tasks.map((task, index) => {
-                    const priorityStyle = priorityConfig[task.priority] || priorityConfig['Medium'];
+                    const priorityStyle = priorityConfig[task.priority] || priorityConfig['medium'];
+                    const actionStyle = actionConfig[task.suggested_schedule_action] || actionConfig['manual'];
                     const isEditing = editingTask === task._id;
 
                     return (
@@ -343,8 +372,8 @@ const SummaryAndTasksPage = () => {
                             </svg>
                             <input
                               type="text"
-                              value={task.owner}
-                              onChange={(e) => updateTask(task._id, 'owner', e.target.value)}
+                              value={getOwnerName(task)}
+                              onChange={(e) => updateTask(task._id, 'assignee', { name: e.target.value })}
                               className="bg-transparent border-b border-transparent hover:border-[var(--border-color)] focus:border-accent outline-none text-primary transition-colors px-1 py-0.5 -mx-1 w-28"
                               onFocus={() => setEditingTask(task._id)}
                               onBlur={() => setEditingTask(null)}
@@ -358,17 +387,71 @@ const SummaryAndTasksPage = () => {
                             </svg>
                             <input
                               type="date"
-                              value={task.dueDate}
-                              onChange={(e) => updateTask(task._id, 'dueDate', e.target.value)}
+                              value={getDueDate(task) || ''}
+                              onChange={(e) => updateTask(task._id, 'due_date', e.target.value)}
                               className="bg-transparent border-b border-transparent hover:border-[var(--border-color)] focus:border-accent outline-none text-primary transition-colors px-1 py-0.5 -mx-1 cursor-pointer"
                               onFocus={() => setEditingTask(task._id)}
                               onBlur={() => setEditingTask(null)}
                             />
                           </div>
 
+                          {/* Action type - editable dropdown */}
+                          <div className="relative">
+                            <select
+                              value={task.suggested_schedule_action || 'manual'}
+                              onChange={(e) => updateTask(task._id, 'suggested_schedule_action', e.target.value)}
+                              className={`
+                                appearance-none cursor-pointer px-3 py-1 rounded-full text-xs font-medium
+                                border transition-colors pr-7
+                                ${actionStyle.bg} ${actionStyle.text} border-transparent
+                              `}
+                            >
+                              <option value="jira">Jira</option>
+                              <option value="slack">Slack</option>
+                              <option value="calendar">Calendar</option>
+                              <option value="manual">Manual</option>
+                            </select>
+                            <svg
+                              className={`absolute right-2 top-1/2 -translate-y-1/2 w-3 h-3 pointer-events-none ${actionStyle.text}`}
+                              fill="none"
+                              viewBox="0 0 24 24"
+                              stroke="currentColor"
+                            >
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                            </svg>
+                          </div>
+
                           {/* Confidence indicator */}
-                          <div className="ml-auto">
-                            <ConfidenceIndicator value={task.confidence} />
+                          <div className="ml-auto flex items-center gap-3">
+                            <ConfidenceIndicator value={getConfidence(task)} />
+
+                            {/* Individual confirm button */}
+                            <button
+                              onClick={() => handleConfirmSingleTask(task)}
+                              disabled={confirmingTaskId === task._id || task.confirmed}
+                              className={`
+                                px-3 py-1 rounded-lg text-xs font-medium transition-all
+                                ${task.confirmed
+                                  ? 'bg-green-500/10 text-green-500 cursor-default'
+                                  : confirmingTaskId === task._id
+                                    ? 'bg-accent/10 text-accent cursor-wait'
+                                    : 'bg-accent/10 text-accent hover:bg-accent/20'
+                                }
+                              `}
+                            >
+                              {task.confirmed ? (
+                                <span className="flex items-center gap-1">
+                                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                  </svg>
+                                  Sent
+                                </span>
+                              ) : confirmingTaskId === task._id ? (
+                                'Sending...'
+                              ) : (
+                                'Confirm'
+                              )}
+                            </button>
                           </div>
                         </div>
                       </motion.div>

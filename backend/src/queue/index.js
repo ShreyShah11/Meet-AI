@@ -129,18 +129,18 @@ const processJob = async (jobId, meetingId, audioPath, type = 'audio') => {
     await updateMeetingStatus(meetingId, 'merging');
     const mergedResult = await llmService.mergeExtractions(chunkExtractions);
 
-    // Step 7: Save summary to MongoDB
+    // Step 7: Save summary to MongoDB (raw LLM format)
     updateJobStep(jobId, STEPS.SAVING_SUMMARY);
     await Summary.findOneAndUpdate(
       { meetingId },
       {
         meetingId,
-        executive: mergedResult.executive,
-        topics: mergedResult.topics,
-        decisions: mergedResult.decisions,
-        actionItems: mergedResult.actionItems,
+        executive: mergedResult.summary,  // Raw 'summary' -> stored as 'executive'
+        topics: [],
+        decisions: [],
+        actionItems: mergedResult.tasks,  // Raw 'tasks' array
         chunkCount: chunks.length,
-        extractionModel: mergedResult.extractionModel
+        extractionModel: 'llama-3.3-70b-versatile'
       },
       { upsert: true, new: true }
     );
