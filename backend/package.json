@@ -1,0 +1,27 @@
+{
+  "name": "meetflow-backend",
+  "version": "1.0.0",
+  "description": "MeetFlow API - AI-powered meeting analysis backend",
+  "type": "module",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "worker": "node src/queue/worker.js",
+    "worker:dev": "node --watch src/queue/worker.js"
+  },
+  "keywords": ["meeting", "transcription", "ai", "express", "mongodb", "bullmq"],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@gradio/client": "^1.14.0",
+    "bullmq": "^5.34.8",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "ioredis": "^5.4.2",
+    "mongoose": "^8.9.5",
+    "multer": "^1.4.5-lts.1",
+    "uuid": "^11.0.5"
+  }
+}
