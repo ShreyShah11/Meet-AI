@@ -27,7 +27,7 @@ const STEPS = {
  * Enqueue and process a job
  */
 export const enqueueProcessingJob = async (jobData) => {
-  const { jobId, meetingId, audioPath } = jobData;
+  const { jobId, meetingId, audioPath, type } = jobData;
 
   // Initialize job with detailed state
   jobs.set(jobId, {
@@ -37,13 +37,14 @@ export const enqueueProcessingJob = async (jobData) => {
     ...STEPS.QUEUED,
     createdAt: Date.now(),
     updatedAt: Date.now(),
-    error: null
+    error: null,
+    type: type || 'audio'
   });
 
-  console.log(`[Queue] Job enqueued: ${jobId}`);
+  console.log(`[Queue] Job enqueued: ${jobId} (${type || 'audio'})`);
 
   // Process asynchronously
-  processJob(jobId, meetingId, audioPath);
+  processJob(jobId, meetingId, audioPath, type);
 
   return { jobId, status: 'queued' };
 };
@@ -51,46 +52,56 @@ export const enqueueProcessingJob = async (jobData) => {
 /**
  * Process job through the pipeline with detailed step tracking
  */
-const processJob = async (jobId, meetingId, audioPath) => {
+const processJob = async (jobId, meetingId, audioPath, type = 'audio') => {
   try {
-    // Step 1: Connecting to Gradio
-    updateJobStep(jobId, STEPS.CONNECTING);
-    await updateMeetingStatus(meetingId, 'transcribing');
+    let segments = [];
 
-    // Step 2: Transcribing with Gradio diarization
-    updateJobStep(jobId, STEPS.TRANSCRIBING);
-    console.log('[Processor] 🎤 Sending to Gradio for diarization...');
+    // Step 1 & 2 & 3: Audio Processing (Skip if transcript-only)
+    if (type !== 'transcript-only') {
+        // Step 1: Connecting to Gradio
+        updateJobStep(jobId, STEPS.CONNECTING);
+        await updateMeetingStatus(meetingId, 'transcribing');
 
-    const segments = await transcriptionService.transcribe(
-        audioPath,
-        {}, // options
-        (step, label) => {
-            // onProgress update
-            console.log(`[Processor] 📢 Progress: ${step} - ${label}`);
+        // Step 2: Transcribing with Gradio diarization
+        updateJobStep(jobId, STEPS.TRANSCRIBING);
+        console.log('[Processor] 🎤 Sending to Gradio for diarization...');
 
-            // Map the service step to our job steps structure
-            const stepInfo = STEPS[step.toUpperCase()] || STEPS.TRANSCRIBING;
-            const stepWithLabel = { ...stepInfo, label };
+        segments = await transcriptionService.transcribe(
+            audioPath,
+            {}, // options
+            (step, label) => {
+                // onProgress update
+                console.log(`[Processor] 📢 Progress: ${step} - ${label}`);
 
-            updateJobStep(jobId, stepWithLabel);
+                // Map the service step to our job steps structure
+                const stepInfo = STEPS[step.toUpperCase()] || STEPS.TRANSCRIBING;
+                const stepWithLabel = { ...stepInfo, label };
+
+                updateJobStep(jobId, stepWithLabel);
+            }
+        );
+
+        if (!segments || segments.length === 0) {
+          throw new Error('No transcript segments received from diarization');
         }
-    );
 
-    if (!segments || segments.length === 0) {
-      throw new Error('No transcript segments received from diarization');
+        // Step 3: Save transcript to MongoDB
+        updateJobStep(jobId, STEPS.SAVING_TRANSCRIPT);
+        const speakers = [...new Set(segments.map(s => s.speaker))];
+        const duration = segments.length > 0 ? segments[segments.length - 1].end : 0;
+
+        await Transcript.findOneAndUpdate(
+          { meetingId },
+          { meetingId, segments, speakers, duration },
+          { upsert: true, new: true }
+        );
+        console.log(`[Processor] 💾 Saved ${segments.length} segments, ${speakers.length} speakers`);
+    } else {
+        // Retrieval for transcript-only jobs
+        const transcript = await Transcript.findOne({ meetingId });
+        if (transcript) segments = transcript.segments;
+        else segments = [{ text: "No content", speaker: "System", start: 0, end: 0 }];
     }
-
-    // Step 3: Save transcript to MongoDB
-    updateJobStep(jobId, STEPS.SAVING_TRANSCRIPT);
-    const speakers = [...new Set(segments.map(s => s.speaker))];
-    const duration = segments.length > 0 ? segments[segments.length - 1].end : 0;
-
-    await Transcript.findOneAndUpdate(
-      { meetingId },
-      { meetingId, segments, speakers, duration },
-      { upsert: true, new: true }
-    );
-    console.log(`[Processor] 💾 Saved ${segments.length} segments, ${speakers.length} speakers`);
 
     // Step 4: Chunking for LLM
     updateJobStep(jobId, STEPS.CHUNKING);
@@ -104,6 +115,7 @@ const processJob = async (jobId, meetingId, audioPath) => {
 
     const chunkExtractions = [];
     for (let i = 0; i < chunks.length; i++) {
+        // Pass the full chunk object
       const extraction = await llmService.extractFromChunk(chunks[i]);
       chunkExtractions.push(extraction);
 

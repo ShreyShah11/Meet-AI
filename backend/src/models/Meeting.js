@@ -21,7 +21,7 @@ const meetingSchema = new mongoose.Schema({
   // Audio file info
   audioPath: {
     type: String,
-    required: true
+    required: false
   },
   originalFilename: String,
   fileSize: Number,

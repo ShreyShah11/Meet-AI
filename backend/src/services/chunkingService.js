@@ -57,78 +57,40 @@ class ChunkingService {
    * Split text blocks into chunks respecting token limits
    */
   splitIntoChunks(blocks) {
-    const chunks = [];
-    let currentChunk = {
-      blocks: [],
-      text: '',
-      wordCount: 0,
-      startTime: 0,
-      endTime: 0
+    // Single chunk logic as requested by user
+    if (blocks.length === 0) return [];
+
+    const text = blocks.map(b => `${b.speaker}: ${b.text}`).join('\n');
+    const wordCount = blocks.reduce((sum, b) => sum + b.wordCount, 0);
+    const speakers = [...new Set(blocks.map(b => b.speaker))];
+
+    const singleChunk = {
+      index: 0,
+      text,
+      wordCount,
+      tokenEstimate: Math.ceil(wordCount * this.config.tokensPerWord),
+      startTime: blocks[0].start,
+      endTime: blocks[blocks.length - 1].end,
+      blocks,
+      speakers,
+      segmentCount: blocks.length
     };
 
-    const maxWords = Math.floor(this.config.maxChunkTokens / this.config.tokensPerWord);
-
-    for (const block of blocks) {
-      const potentialWordCount = currentChunk.wordCount + block.wordCount;
-
-      // If adding this block exceeds limit, save current chunk and start new
-      if (potentialWordCount > maxWords && currentChunk.blocks.length > 0) {
-        chunks.push(this.finalizeChunk(currentChunk, chunks.length));
-
-        // Start new chunk with overlap
-        const overlapBlocks = this.getOverlapBlocks(currentChunk.blocks);
-        currentChunk = {
-          blocks: [...overlapBlocks],
-          text: overlapBlocks.map(b => `${b.speaker}: ${b.text}`).join('\n'),
-          wordCount: overlapBlocks.reduce((sum, b) => sum + b.wordCount, 0),
-          startTime: overlapBlocks[0]?.start || block.start,
-          endTime: overlapBlocks[overlapBlocks.length - 1]?.end || block.start
-        };
-      }
-
-      // Add block to current chunk
-      currentChunk.blocks.push(block);
-      currentChunk.text += `\n${block.speaker}: ${block.text}`;
-      currentChunk.wordCount += block.wordCount;
-
-      if (currentChunk.blocks.length === 1) {
-        currentChunk.startTime = block.start;
-      }
-      currentChunk.endTime = block.end;
-    }
-
-    // Don't forget the last chunk
-    if (currentChunk.blocks.length > 0) {
-      chunks.push(this.finalizeChunk(currentChunk, chunks.length));
-    }
-
-    return chunks;
+    return [singleChunk];
   }
 
   /**
-   * Get overlap blocks from previous chunk
+   * Get overlap blocks from previous chunk (Unused now)
    */
   getOverlapBlocks(blocks) {
-    const overlapCount = Math.min(this.config.overlapSentences, blocks.length);
-    return blocks.slice(-overlapCount);
+    return [];
   }
 
   /**
-   * Finalize chunk with metadata
+   * Finalize chunk with metadata (Unused now)
    */
   finalizeChunk(chunk, index) {
-    const speakers = [...new Set(chunk.blocks.map(b => b.speaker))];
-
-    return {
-      index,
-      text: chunk.text.trim(),
-      wordCount: chunk.wordCount,
-      tokenEstimate: Math.ceil(chunk.wordCount * this.config.tokensPerWord),
-      startTime: chunk.startTime,
-      endTime: chunk.endTime,
-      speakers,
-      segmentCount: chunk.blocks.length
-    };
+    return chunk;
   }
 
   /**

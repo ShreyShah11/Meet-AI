@@ -26,13 +26,31 @@ const storage = multer.diskStorage({
  * File filter - accept audio only
  */
 const fileFilter = (req, file, cb) => {
-  const allowedTypes = [
+  // Allowed audio types
+  const audioTypes = [
     'audio/mpeg', 'audio/mp3', 'audio/wav', 'audio/x-wav',
     'audio/wave', 'audio/webm', 'audio/ogg', 'audio/flac',
     'audio/x-flac', 'audio/mp4', 'audio/x-m4a', 'audio/aac'
   ];
 
-  if (file.mimetype.startsWith('audio/') || allowedTypes.includes(file.mimetype)) {
+  // Allowed transcript types
+  const transcriptTypes = [
+    'text/plain', 'application/json', 'text/vtt', 'application/x-subrip', 'text/srt'
+  ];
+
+  // Generic validation based on fieldname
+  if (file.fieldname === 'transcript') {
+      // Allow typical transcript extensions/mimes
+      const ext = path.extname(file.originalname).toLowerCase();
+      if (['.txt', '.json', '.srt', '.vtt', '.cc'].includes(ext) ||
+          transcriptTypes.includes(file.mimetype)) {
+          return cb(null, true);
+      }
+      return cb(new Error('Invalid transcript file. Allowed: .txt, .json, .srt, .vtt'), false);
+  }
+
+  // Audio validation (default or explicit 'audio' field)
+  if (file.mimetype.startsWith('audio/') || audioTypes.includes(file.mimetype)) {
     cb(null, true);
   } else {
     cb(new Error('Only audio files are allowed'), false);

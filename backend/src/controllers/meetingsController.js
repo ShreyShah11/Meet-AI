@@ -52,6 +52,112 @@ export const uploadMeeting = async (req, res) => {
 };
 
 /**
+ * POST /api/meetings/upload-transcript
+ * Upload transcript file and start processing
+ */
+export const uploadTranscript = async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ message: 'No transcript file provided' });
+    }
+
+    // Generate job ID
+    const jobId = `job-${Date.now()}-${uuidv4().slice(0, 8)}`;
+
+    // Read file content
+    const fs = await import('fs');
+    const content = fs.readFileSync(req.file.path, 'utf8');
+
+    let segments = [];
+
+    // Generic parsing logic
+    if (segments.length === 0) {
+        const lines = content.split(/\r?\n/);
+        const timestampRegex = /\[?\(?(\d{1,2}:\d{2}(?::\d{2})?)\)?\]?\s*([A-Za-z0-9 ]+?):\s*(.+)/;
+
+        segments = lines.map(line => {
+            // Remove potential RTF artifacts if simple
+            const cleanLine = line.replace(/\\par/g, '').trim();
+            if (!cleanLine) return null;
+
+            const match = cleanLine.match(timestampRegex);
+            if (match) {
+                const timeStr = match[1];
+                const speaker = match[2].trim();
+                const text = match[3].trim();
+
+                // Convert time to seconds
+                const parts = timeStr.split(':').map(Number);
+                let seconds = 0;
+                if (parts.length === 3) seconds = parts[0] * 3600 + parts[1] * 60 + parts[2];
+                else seconds = parts[0] * 60 + parts[1];
+
+                return {
+                    speaker,
+                    start: seconds,
+                    end: seconds + 30, // Estimate end time if not given
+                    text
+                };
+            }
+            return null;
+        }).filter(s => s !== null);
+    }
+
+    // Fallback: treat as plain text chunk if no timestamps found
+    if (segments.length === 0) {
+        // Strip RTF header junk if present
+        const strippedContent = content.replace(/\{\\rtf1.+?\n/s, '').replace(/\\[a-z0-9]+/g, ' ').trim();
+
+        segments = [{
+            speaker: 'Unknown',
+            start: 0,
+            end: 0,
+            text: strippedContent.substring(0, 50000) // Limit size
+        }];
+    }
+
+    // Create meeting record
+    const meeting = new Meeting({
+      title: req.body.title || `Imported Transcript ${new Date().toLocaleDateString()}`,
+      status: 'uploading',
+      audioPath: null, // No audio
+      originalFilename: req.file.originalname,
+      fileSize: req.file.size,
+      jobId
+    });
+
+    await meeting.save();
+
+    // Save transcript immediately
+    await Transcript.create({
+        meetingId: meeting._id,
+        segments,
+        speakers: [...new Set(segments.map(s => s.speaker))],
+        duration: 0
+    });
+
+    // Enqueue processing job (extraction only)
+    await enqueueProcessingJob({
+      jobId,
+      meetingId: meeting._id.toString(),
+      audioPath: null,
+      type: 'transcript-only'
+    });
+
+    console.log(`[Upload] Transcript imported: ${meeting._id}, Job: ${jobId}`);
+
+    res.status(201).json({
+      meetingId: meeting._id,
+      jobId
+    });
+
+  } catch (error) {
+    console.error('[Upload] Error:', error);
+    res.status(500).json({ message: error.message || 'Upload failed' });
+  }
+};
+
+/**
  * GET /api/meetings/:meetingId/transcript
  * Get transcript for a meeting
  */
@@ -143,6 +249,7 @@ const formatTime = (seconds) => {
 
 export default {
   uploadMeeting,
+  uploadTranscript,
   getTranscript,
   getSummary,
   updateTasks

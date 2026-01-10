@@ -41,6 +41,11 @@ const SummaryAndTasksPage = () => {
 
   // Priority configuration
   const priorityConfig = {
+    'Critical': {
+      bg: 'bg-red-600/10',
+      text: 'text-red-700 font-bold',
+      border: 'border-red-600/20'
+    },
     'High': {
       bg: 'bg-red-500/10',
       text: 'text-red-500',
@@ -56,6 +61,11 @@ const SummaryAndTasksPage = () => {
       text: 'text-green-500',
       border: 'border-green-500/20'
     },
+    'Unknown': {
+      bg: 'bg-gray-500/10',
+      text: 'text-gray-500',
+      border: 'border-gray-500/20'
+    }
   };
 
   // Update task field
@@ -270,12 +280,12 @@ const SummaryAndTasksPage = () => {
               <div className="space-y-3">
                 <AnimatePresence>
                   {tasks.map((task, index) => {
-                    const priorityStyle = priorityConfig[task.priority];
-                    const isEditing = editingTask === task.id;
+                    const priorityStyle = priorityConfig[task.priority] || priorityConfig['Medium'];
+                    const isEditing = editingTask === task._id;
 
                     return (
                       <motion.div
-                        key={task.id}
+                        key={task._id}
                         initial={{ opacity: 0, y: 10 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ delay: 0.1 + index * 0.05 }}
@@ -297,7 +307,7 @@ const SummaryAndTasksPage = () => {
                           <div className="relative">
                             <select
                               value={task.priority}
-                              onChange={(e) => updateTask(task.id, 'priority', e.target.value)}
+                              onChange={(e) => updateTask(task._id, 'priority', e.target.value)}
                               className={`
                                 appearance-none cursor-pointer px-3 py-1 rounded-full text-xs font-medium
                                 border transition-colors pr-7
@@ -334,9 +344,9 @@ const SummaryAndTasksPage = () => {
                             <input
                               type="text"
                               value={task.owner}
-                              onChange={(e) => updateTask(task.id, 'owner', e.target.value)}
+                              onChange={(e) => updateTask(task._id, 'owner', e.target.value)}
                               className="bg-transparent border-b border-transparent hover:border-[var(--border-color)] focus:border-accent outline-none text-primary transition-colors px-1 py-0.5 -mx-1 w-28"
-                              onFocus={() => setEditingTask(task.id)}
+                              onFocus={() => setEditingTask(task._id)}
                               onBlur={() => setEditingTask(null)}
                             />
                           </div>
@@ -349,9 +359,9 @@ const SummaryAndTasksPage = () => {
                             <input
                               type="date"
                               value={task.dueDate}
-                              onChange={(e) => updateTask(task.id, 'dueDate', e.target.value)}
+                              onChange={(e) => updateTask(task._id, 'dueDate', e.target.value)}
                               className="bg-transparent border-b border-transparent hover:border-[var(--border-color)] focus:border-accent outline-none text-primary transition-colors px-1 py-0.5 -mx-1 cursor-pointer"
-                              onFocus={() => setEditingTask(task.id)}
+                              onFocus={() => setEditingTask(task._id)}
                               onBlur={() => setEditingTask(null)}
                             />
                           </div>
