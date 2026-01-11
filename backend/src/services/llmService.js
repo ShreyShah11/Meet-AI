@@ -233,13 +233,38 @@ CONFIDENCE RULES:
 <0.40 – Weak / unclear
 
 --------------------------------------------------
-TASK TYPE / ACTION RULES:
+TASK TYPE / ACTION RULES (IMPORTANT - classify carefully):
 
-Infer suggested_schedule_action:
-- Slack alerts / notifications → "slack"
-- Tickets / tracking / Jira mention → "jira"
-- Scheduling / meeting / calendar → "calendar"
-- Everything else → "manual"
+Determine suggested_schedule_action based on the NATURE of the task:
+
+"jira" → Engineering / Development / Bug fixes / Features:
+  - Fix a bug, issue, or error
+  - Implement a feature
+  - Code changes, refactoring, optimization
+  - Update screens, flows, UI components
+  - Backend/frontend development work
+  - Performance improvements
+  - Technical cleanup (feature flags, old code)
+  - Any task requiring code changes
+  - Anything which requires a ticket
+  - Anything which involves coding
+"calendar" → Scheduling / Meetings:
+  - Schedule a meeting
+  - Book a call
+  - Set up a sync
+  - Plan a review session
+  - Organize a demo
+
+"slack" → Communication / Notifications / Slack-related work:
+  - Send a Slack message
+  - Notify someone or a channel
+  - Post an update to Slack
+  - Alert the team via Slack
+  - Implement Slack notifications or integration
+  - Add Slack alerts or webhooks
+  - Any task mentioning "Slack" in description
+
+"manual" → Everything else that doesn't fit above
 
 --------------------------------------------------
 OUTPUT FORMAT (STRICT JSON):
@@ -327,14 +352,14 @@ class LLMService {
   }
 
   /**
-   * Merge chunk extractions (Pass 2)
+   * Merge chunk extractions (Pass 2) - Returns raw LLM format
    */
   async mergeExtractions(chunkExtractions) {
     console.log(`[LLM] Merging ${chunkExtractions.length} extractions`);
 
     if (chunkExtractions.length === 1) {
-        const result = chunkExtractions[0];
-        return this.normalizeLLMOutput(result);
+        // Return raw LLM output directly
+        return chunkExtractions[0];
     }
 
     // Simple Merge for multiple chunks (concat tasks)
@@ -346,7 +371,8 @@ class LLMService {
         if (!summary && extraction.summary) summary = extraction.summary;
     }
 
-    return this.normalizeLLMOutput({ summary, tasks: mergedTasks });
+    // Return raw merged format
+    return { summary, tasks: mergedTasks };
   }
 
   /**
@@ -419,10 +445,16 @@ class LLMService {
             title: task.title,
             description: task.description,
             owner: task.assignee?.name !== 'unknown' ? task.assignee?.name : 'Unassigned',
+            assigner: task.assigner?.name || 'Unknown',
             priority: task.priority ? task.priority.charAt(0).toUpperCase() + task.priority.slice(1) : 'Medium',
+            urgencyReasoning: task.urgency_reasoning || null,
             dueDate: task.due_date,
+            suggestedAction: task.suggested_schedule_action || 'manual',
+            status: task.status || 'proposed',
             confidence: Math.round((task.confidence || 0.8) * 100),
-            status: task.status
+            evidence: task.evidence || [],
+            notes: task.notes || null,
+            confirmed: false
         }));
 
         return {

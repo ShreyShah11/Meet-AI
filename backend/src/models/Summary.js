@@ -5,21 +5,52 @@
 import mongoose from 'mongoose';
 
 const actionItemSchema = new mongoose.Schema({
+  task_id: String,
   title: { type: String, required: true },
   description: String,
-  owner: String,
+  assigner: {
+    name: String
+  },
+  assignee: {
+    name: String,
+    disambiguation: {
+      status: { type: String, enum: ['confirmed', 'ambiguous', 'candidate_list'] },
+      candidates: [{
+        name: String,
+        confidence: Number,
+        evidence: [String]
+      }]
+    }
+  },
   priority: {
     type: String,
-    enum: ['High', 'Medium', 'Low'],
-    default: 'Medium'
+    enum: ['critical', 'high', 'medium', 'low', 'unknown', 'Critical', 'High', 'Medium', 'Low', 'Unknown'],
+    default: 'medium'
   },
-  dueDate: String,
+  urgency_reasoning: String,
+  due_date: String,
+  suggested_schedule_action: {
+    type: String,
+    enum: ['slack', 'jira', 'calendar', 'manual', 'other'],
+    default: 'manual'
+  },
+  status: {
+    type: String,
+    enum: ['proposed', 'assigned', 'in-progress', 'completed', 'cancelled'],
+    default: 'proposed'
+  },
+  evidence: [{
+    speaker: String,
+    timestamp: String,
+    snippet: String
+  }],
   confidence: {
     type: Number,
     min: 0,
-    max: 100,
-    default: 80
+    max: 1,
+    default: 0.8
   },
+  notes: String,
   confirmed: { type: Boolean, default: false }
 }, { _id: true });
 

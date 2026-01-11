@@ -8,6 +8,7 @@ import UploadPage from './pages/UploadPage';
 import ProcessingPage from './pages/ProcessingPage';
 import TranscriptPage from './pages/TranscriptPage';
 import SummaryAndTasksPage from './pages/SummaryAndTasksPage';
+import TeamMembersPage from './pages/TeamMembersPage';
 
 /**
  * App - Root component with routing configuration
@@ -29,6 +30,9 @@ function App() {
 
           {/* Summary page - AI insights and tasks */}
           <Route path="/meetings/:meetingId/summary" element={<SummaryAndTasksPage />} />
+
+          {/* Team Members page - Configure service mappings */}
+          <Route path="/team-members" element={<TeamMembersPage />} />
         </Route>
       </Routes>
     </BrowserRouter>
@@ -36,3 +40,4 @@ function App() {
 }
 
 export default App;
+

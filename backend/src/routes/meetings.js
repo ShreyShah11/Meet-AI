@@ -9,7 +9,8 @@ import {
   uploadTranscript,
   getTranscript,
   getSummary,
-  updateTasks
+  updateTasks,
+  confirmSingleTask
 } from '../controllers/meetingsController.js';
 
 const router = Router();
@@ -26,7 +27,10 @@ router.get('/:meetingId/transcript', getTranscript);
 // GET /api/meetings/:meetingId/summary - Get summary
 router.get('/:meetingId/summary', getSummary);
 
-// POST /api/meetings/:meetingId/tasks - Update tasks
+// POST /api/meetings/:meetingId/tasks - Update all tasks
 router.post('/:meetingId/tasks', updateTasks);
+
+// POST /api/meetings/:meetingId/tasks/:taskId/confirm - Confirm single task
+router.post('/:meetingId/tasks/:taskId/confirm', confirmSingleTask);
 
 export default router;

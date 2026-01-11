@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Outlet } from 'react-router-dom';
+import { Outlet, Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 
 /**
@@ -61,8 +61,21 @@ const MainLayout = () => {
               </span>
             </div>
 
-            {/* Theme Toggle */}
-            <button
+            {/* Navigation */}
+            <div className="flex items-center gap-2">
+              {/* Team Members Link */}
+              <Link
+                to="/team-members"
+                className="flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-white/10 transition-colors"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+                </svg>
+                <span className="hidden sm:inline">Team</span>
+              </Link>
+
+              {/* Theme Toggle */}
+              <button
               onClick={toggleTheme}
               className="p-2 rounded-xl hover:bg-gray-100 dark:hover:bg-white/10 transition-colors"
               aria-label="Toggle theme"
@@ -109,6 +122,7 @@ const MainLayout = () => {
                 )}
               </AnimatePresence>
             </button>
+            </div>
           </div>
         </div>
       </header>

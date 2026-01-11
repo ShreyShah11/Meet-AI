@@ -250,6 +250,67 @@ export const confirmTasks = async (meetingId, tasks) => {
   });
 };
 
+/**
+ * Confirm a single task and trigger n8n workflow
+ * @param {string} meetingId - The meeting ID
+ * @param {string} taskId - The task ID
+ * @param {Object} task - The updated task object
+ * @returns {Promise<{success: boolean, task: Object}>}
+ */
+export const confirmSingleTask = async (meetingId, taskId, task) => {
+  if (USE_MOCKS) {
+    await delay(MOCK_DELAY);
+    console.log('Single task confirmed:', task);
+    return { success: true, task };
+  }
+
+  // Real API call
+  return apiRequest(`/meetings/${meetingId}/tasks/${taskId}/confirm`, {
+    method: 'POST',
+    body: JSON.stringify({ task }),
+  });
+};
+
+// ============================================
+// TEAM MEMBERS API
+// ============================================
+
+/**
+ * Get all team members
+ */
+export const getTeamMembers = async () => {
+  return apiRequest('/team-members');
+};
+
+/**
+ * Create a team member
+ */
+export const createTeamMember = async (member) => {
+  return apiRequest('/team-members', {
+    method: 'POST',
+    body: JSON.stringify(member),
+  });
+};
+
+/**
+ * Update a team member
+ */
+export const updateTeamMember = async (id, member) => {
+  return apiRequest(`/team-members/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(member),
+  });
+};
+
+/**
+ * Delete a team member
+ */
+export const deleteTeamMember = async (id) => {
+  return apiRequest(`/team-members/${id}`, {
+    method: 'DELETE',
+  });
+};
+
 // ============================================
 // UTILITY EXPORTS
 // ============================================
@@ -262,6 +323,11 @@ export const api = {
   getSummary,
   reExtractMeeting,
   confirmTasks,
+  confirmSingleTask,
+  getTeamMembers,
+  createTeamMember,
+  updateTeamMember,
+  deleteTeamMember,
 };
 
 export default api;

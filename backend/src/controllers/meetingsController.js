@@ -228,7 +228,7 @@ export const getTranscript = async (req, res) => {
 
 /**
  * GET /api/meetings/:meetingId/summary
- * Get summary and action items for a meeting
+ * Get summary and action items for a meeting (raw LLM format)
  */
 export const getSummary = async (req, res) => {
   try {
@@ -240,10 +240,10 @@ export const getSummary = async (req, res) => {
       return res.status(404).json({ message: 'Summary not found' });
     }
 
+    // Return raw LLM format
     res.json({
-      executive: summary.executive,
-      decisions: summary.decisions,
-      actionItems: summary.actionItems
+      summary: summary.executive,
+      tasks: summary.actionItems
     });
 
   } catch (error) {
@@ -254,7 +254,7 @@ export const getSummary = async (req, res) => {
 
 /**
  * POST /api/meetings/:meetingId/tasks
- * Update confirmed tasks
+ * Update confirmed tasks and trigger n8n workflow
  */
 export const updateTasks = async (req, res) => {
   try {
@@ -267,11 +267,118 @@ export const updateTasks = async (req, res) => {
     );
 
     console.log(`[Tasks] Updated ${tasks?.length || 0} tasks for meeting: ${meetingId}`);
+
+    // Trigger n8n webhook with the confirmed tasks
+    try {
+      const n8nWebhookUrl = process.env.N8N_WEBHOOK_URL || 'http://localhost:5678/webhook-test/confirm-tasks';
+
+      const webhookResponse = await fetch(n8nWebhookUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          meetingId,
+          tasks,
+          confirmedAt: new Date().toISOString()
+        }),
+      });
+
+      if (webhookResponse.ok) {
+        console.log(`[Tasks] n8n webhook triggered successfully for meeting: ${meetingId}`);
+      } else {
+        console.warn(`[Tasks] n8n webhook returned status: ${webhookResponse.status}`);
+      }
+    } catch (webhookError) {
+      // Log but don't fail the request if webhook fails
+      console.error('[Tasks] n8n webhook error:', webhookError.message);
+    }
+
     res.json({ success: true });
 
   } catch (error) {
     console.error('[Tasks] Error:', error);
     res.status(500).json({ message: 'Failed to update tasks' });
+  }
+};
+
+/**
+ * POST /api/meetings/:meetingId/tasks/:taskId/confirm
+ * Confirm and update a single task, then trigger n8n workflow with enriched data
+ */
+export const confirmSingleTask = async (req, res) => {
+  try {
+    const { meetingId, taskId } = req.params;
+    const { task } = req.body;
+
+    // Find the summary and update the specific task
+    const summary = await Summary.findOne({ meetingId });
+    if (!summary) {
+      return res.status(404).json({ message: 'Summary not found' });
+    }
+
+    // Update the specific task in actionItems array
+    const taskIndex = summary.actionItems.findIndex(t => t._id.toString() === taskId);
+    if (taskIndex === -1) {
+      return res.status(404).json({ message: 'Task not found' });
+    }
+
+    // Merge the updated task data
+    summary.actionItems[taskIndex] = {
+      ...summary.actionItems[taskIndex].toObject(),
+      ...task,
+      confirmed: true
+    };
+    summary.updatedAt = Date.now();
+    await summary.save();
+
+    const confirmedTask = summary.actionItems[taskIndex];
+    console.log(`[Tasks] Confirmed single task: ${confirmedTask.title} for meeting: ${meetingId}`);
+
+    // Map assignee name to service IDs
+    const { mapAssigneeToServiceIds } = await import('./teamMembersController.js');
+    const assigneeName = confirmedTask.assignee?.name || confirmedTask.owner || 'Unassigned';
+    const assigneeMapping = await mapAssigneeToServiceIds(assigneeName);
+
+    // Enrich task with service IDs for n8n
+    const enrichedTask = {
+      ...confirmedTask.toObject ? confirmedTask.toObject() : confirmedTask,
+      assigneeMapping // Contains atlassianEmail, googleEmail, slackUserId, slackMention
+    };
+
+    console.log(`[Tasks] Enriched task with mapping:`, assigneeMapping);
+
+    // Trigger n8n webhook with the enriched task
+    try {
+      const n8nWebhookUrl = process.env.N8N_WEBHOOK_URL || 'http://localhost:5678/webhook-test/confirm-tasks';
+
+      const webhookResponse = await fetch(n8nWebhookUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          meetingId,
+          tasks: [enrichedTask],
+          confirmedAt: new Date().toISOString(),
+          singleTask: true
+        }),
+      });
+
+      if (webhookResponse.ok) {
+        console.log(`[Tasks] n8n webhook triggered for single task: ${confirmedTask.title}`);
+      } else {
+        console.warn(`[Tasks] n8n webhook returned status: ${webhookResponse.status}`);
+      }
+    } catch (webhookError) {
+      console.error('[Tasks] n8n webhook error:', webhookError.message);
+    }
+
+    res.json({ success: true, task: confirmedTask });
+
+  } catch (error) {
+    console.error('[Tasks] Error:', error);
+    res.status(500).json({ message: 'Failed to confirm task' });
   }
 };
 
@@ -290,5 +397,6 @@ export default {
   uploadTranscript,
   getTranscript,
   getSummary,
-  updateTasks
+  updateTasks,
+  confirmSingleTask
 };
