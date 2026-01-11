@@ -5,3 +5,4 @@
 export { Meeting } from './Meeting.js';
 export { Transcript } from './Transcript.js';
 export { Summary } from './Summary.js';
+export { TeamMember } from './TeamMember.js';

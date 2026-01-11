@@ -266,7 +266,7 @@ export const updateTasks = async (req, res) => {
 
 /**
  * POST /api/meetings/:meetingId/tasks/:taskId/confirm
- * Confirm and update a single task, then trigger n8n workflow
+ * Confirm and update a single task, then trigger n8n workflow with enriched data
  */
 export const confirmSingleTask = async (req, res) => {
   try {
@@ -297,7 +297,20 @@ export const confirmSingleTask = async (req, res) => {
     const confirmedTask = summary.actionItems[taskIndex];
     console.log(`[Tasks] Confirmed single task: ${confirmedTask.title} for meeting: ${meetingId}`);
 
-    // Trigger n8n webhook with the single confirmed task
+    // Map assignee name to service IDs
+    const { mapAssigneeToServiceIds } = await import('./teamMembersController.js');
+    const assigneeName = confirmedTask.assignee?.name || confirmedTask.owner || 'Unassigned';
+    const assigneeMapping = await mapAssigneeToServiceIds(assigneeName);
+
+    // Enrich task with service IDs for n8n
+    const enrichedTask = {
+      ...confirmedTask.toObject ? confirmedTask.toObject() : confirmedTask,
+      assigneeMapping // Contains atlassianEmail, googleEmail, slackUserId, slackMention
+    };
+
+    console.log(`[Tasks] Enriched task with mapping:`, assigneeMapping);
+
+    // Trigger n8n webhook with the enriched task
     try {
       const n8nWebhookUrl = process.env.N8N_WEBHOOK_URL || 'http://localhost:5678/webhook-test/confirm-tasks';
 
@@ -308,7 +321,7 @@ export const confirmSingleTask = async (req, res) => {
         },
         body: JSON.stringify({
           meetingId,
-          tasks: [confirmedTask], // Send as array with single task
+          tasks: [enrichedTask],
           confirmedAt: new Date().toISOString(),
           singleTask: true
         }),

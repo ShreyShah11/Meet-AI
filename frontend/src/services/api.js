@@ -272,6 +272,46 @@ export const confirmSingleTask = async (meetingId, taskId, task) => {
 };
 
 // ============================================
+// TEAM MEMBERS API
+// ============================================
+
+/**
+ * Get all team members
+ */
+export const getTeamMembers = async () => {
+  return apiRequest('/team-members');
+};
+
+/**
+ * Create a team member
+ */
+export const createTeamMember = async (member) => {
+  return apiRequest('/team-members', {
+    method: 'POST',
+    body: JSON.stringify(member),
+  });
+};
+
+/**
+ * Update a team member
+ */
+export const updateTeamMember = async (id, member) => {
+  return apiRequest(`/team-members/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(member),
+  });
+};
+
+/**
+ * Delete a team member
+ */
+export const deleteTeamMember = async (id) => {
+  return apiRequest(`/team-members/${id}`, {
+    method: 'DELETE',
+  });
+};
+
+// ============================================
 // UTILITY EXPORTS
 // ============================================
 
@@ -284,6 +324,10 @@ export const api = {
   reExtractMeeting,
   confirmTasks,
   confirmSingleTask,
+  getTeamMembers,
+  createTeamMember,
+  updateTeamMember,
+  deleteTeamMember,
 };
 
 export default api;

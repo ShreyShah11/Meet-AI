@@ -7,7 +7,7 @@ import cors from 'cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { config } from './config/env.js';
-import { meetingsRoutes, jobsRoutes } from './routes/index.js';
+import { meetingsRoutes, jobsRoutes, teamMembersRoutes } from './routes/index.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -41,6 +41,7 @@ if (config.isDev) {
 
 app.use('/api/meetings', meetingsRoutes);
 app.use('/api/jobs', jobsRoutes);
+app.use('/api/team-members', teamMembersRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {
