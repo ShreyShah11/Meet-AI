@@ -8,6 +8,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { config } from './config/env.js';
 import { meetingsRoutes, jobsRoutes } from './routes/index.js';
+import { createProxyMiddleware } from 'http-proxy-middleware';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -24,6 +25,31 @@ const app = express();
 app.use(cors({
   origin: config.frontendUrl,
   credentials: true
+}));
+
+// Proxy to Python Bot Service
+// Must be before body parsers to ensure stream is not consumed
+app.use('/api/bot', createProxyMiddleware({
+  target: 'http://127.0.0.1:5001',
+  changeOrigin: true,
+  pathRewrite: {
+    '^/api/bot': '', // remove base path
+  },
+  onProxyReq: (proxyReq, req, res) => {
+    console.log(`[Proxy] forward: ${req.method} ${req.url} -> http://127.0.0.1:5001${proxyReq.path}`);
+    // Fix for body parser issue if it *was* already parsed (safety check)
+    if (req.body && Object.keys(req.body).length > 0) {
+      const bodyData = JSON.stringify(req.body);
+      // incase if content-type is application/x-www-form-urlencoded -> we need to change to application/json
+      proxyReq.setHeader('Content-Type', 'application/json');
+      proxyReq.setHeader('Content-Length', Buffer.byteLength(bodyData));
+      // stream the content
+      proxyReq.write(bodyData);
+    }
+  },
+  onProxyRes: (proxyRes, req, res) => {
+    console.log(`[Proxy] response: ${proxyRes.statusCode} from ${req.url}`);
+  }
 }));
 
 // Body parsing

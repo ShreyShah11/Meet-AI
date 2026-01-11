@@ -71,49 +71,87 @@ export const uploadTranscript = async (req, res) => {
     let segments = [];
 
     // Generic parsing logic
+
+    // 1. Try JSON parsing first
+    try {
+      const jsonData = JSON.parse(content);
+
+      const parseTime = (val) => {
+        if (typeof val === 'number') return val;
+        if (typeof val === 'string' && val.includes(':')) {
+          const parts = val.split(':').map(Number);
+          if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2];
+          if (parts.length === 2) return parts[0] * 60 + parts[1];
+        }
+        return 0;
+      };
+
+      let list = [];
+      if (Array.isArray(jsonData)) {
+        list = jsonData;
+      } else if (jsonData && typeof jsonData === 'object') {
+        list = jsonData.transcript || jsonData.segments || [];
+      }
+
+      if (Array.isArray(list) && list.length > 0) {
+        segments = list.map(s => ({
+          speaker: s.speaker || 'Unknown',
+          start: parseTime(s.start),
+          end: parseTime(s.end) || (parseTime(s.start) + 30),
+          text: s.text || ''
+        }));
+        console.log(`[Upload] Parsed ${segments.length} segments from JSON`);
+        if (segments.length > 0) {
+          console.log('[Upload] First segment sample:', JSON.stringify(segments[0], null, 2));
+        }
+      }
+    } catch (e) {
+      console.log('[Upload] Not a standard JSON transcript, falling back to text parsing');
+    }
+
     if (segments.length === 0) {
-        const lines = content.split(/\r?\n/);
-        const timestampRegex = /\[?\(?(\d{1,2}:\d{2}(?::\d{2})?)\)?\]?\s*([A-Za-z0-9 ]+?):\s*(.+)/;
+      const lines = content.split(/\r?\n/);
+      const timestampRegex = /\[?\(?(\d{1,2}:\d{2}(?::\d{2})?)\)?\]?\s*([A-Za-z0-9 ]+?):\s*(.+)/;
 
-        segments = lines.map(line => {
-            // Remove potential RTF artifacts if simple
-            const cleanLine = line.replace(/\\par/g, '').trim();
-            if (!cleanLine) return null;
+      segments = lines.map(line => {
+        // Remove potential RTF artifacts if simple
+        const cleanLine = line.replace(/\\par/g, '').trim();
+        if (!cleanLine) return null;
 
-            const match = cleanLine.match(timestampRegex);
-            if (match) {
-                const timeStr = match[1];
-                const speaker = match[2].trim();
-                const text = match[3].trim();
+        const match = cleanLine.match(timestampRegex);
+        if (match) {
+          const timeStr = match[1];
+          const speaker = match[2].trim();
+          const text = match[3].trim();
 
-                // Convert time to seconds
-                const parts = timeStr.split(':').map(Number);
-                let seconds = 0;
-                if (parts.length === 3) seconds = parts[0] * 3600 + parts[1] * 60 + parts[2];
-                else seconds = parts[0] * 60 + parts[1];
+          // Convert time to seconds
+          const parts = timeStr.split(':').map(Number);
+          let seconds = 0;
+          if (parts.length === 3) seconds = parts[0] * 3600 + parts[1] * 60 + parts[2];
+          else seconds = parts[0] * 60 + parts[1];
 
-                return {
-                    speaker,
-                    start: seconds,
-                    end: seconds + 30, // Estimate end time if not given
-                    text
-                };
-            }
-            return null;
-        }).filter(s => s !== null);
+          return {
+            speaker,
+            start: seconds,
+            end: seconds + 30, // Estimate end time if not given
+            text
+          };
+        }
+        return null;
+      }).filter(s => s !== null);
     }
 
     // Fallback: treat as plain text chunk if no timestamps found
     if (segments.length === 0) {
-        // Strip RTF header junk if present
-        const strippedContent = content.replace(/\{\\rtf1.+?\n/s, '').replace(/\\[a-z0-9]+/g, ' ').trim();
+      // Strip RTF header junk if present
+      const strippedContent = content.replace(/\{\\rtf1.+?\n/s, '').replace(/\\[a-z0-9]+/g, ' ').trim();
 
-        segments = [{
-            speaker: 'Unknown',
-            start: 0,
-            end: 0,
-            text: strippedContent.substring(0, 50000) // Limit size
-        }];
+      segments = [{
+        speaker: 'Unknown',
+        start: 0,
+        end: 0,
+        text: strippedContent.substring(0, 50000) // Limit size
+      }];
     }
 
     // Create meeting record
@@ -130,10 +168,10 @@ export const uploadTranscript = async (req, res) => {
 
     // Save transcript immediately
     await Transcript.create({
-        meetingId: meeting._id,
-        segments,
-        speakers: [...new Set(segments.map(s => s.speaker))],
-        duration: 0
+      meetingId: meeting._id,
+      segments,
+      speakers: [...new Set(segments.map(s => s.speaker))],
+      duration: 0
     });
 
     // Enqueue processing job (extraction only)
