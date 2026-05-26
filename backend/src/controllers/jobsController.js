@@ -18,6 +18,11 @@ export const getJobStatus = async (req, res) => {
 
     if (queueJob) {
       // Return detailed job info from queue
+      const meeting = await Meeting.findOne({ _id: queueJob.meetingId, organizationId: req.organizationId });
+      if (!meeting) {
+        return res.status(404).json({ message: 'Job not found' });
+      }
+
       return res.json({
         status: queueJob.status,
         step: queueJob.step,
@@ -31,7 +36,7 @@ export const getJobStatus = async (req, res) => {
     }
 
     // Fallback: Check database for completed/historical jobs
-    const meeting = await Meeting.findOne({ jobId });
+    const meeting = await Meeting.findOne({ jobId, organizationId: req.organizationId });
 
     if (!meeting) {
       return res.status(404).json({ message: 'Job not found' });

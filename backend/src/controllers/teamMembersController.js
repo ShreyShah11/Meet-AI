@@ -10,7 +10,7 @@ import { TeamMember } from '../models/index.js';
  */
 export const getAllTeamMembers = async (req, res) => {
   try {
-    const members = await TeamMember.find().sort({ name: 1 });
+    const members = await TeamMember.find({ organizationId: req.organizationId }).sort({ name: 1 });
     res.json(members);
   } catch (error) {
     console.error('[TeamMembers] Error fetching:', error);
@@ -24,7 +24,7 @@ export const getAllTeamMembers = async (req, res) => {
  */
 export const getTeamMember = async (req, res) => {
   try {
-    const member = await TeamMember.findById(req.params.id);
+    const member = await TeamMember.findOne({ _id: req.params.id, organizationId: req.organizationId });
     if (!member) {
       return res.status(404).json({ message: 'Team member not found' });
     }
@@ -49,6 +49,7 @@ export const createTeamMember = async (req, res) => {
 
     // Check for duplicate name
     const existing = await TeamMember.findOne({
+      organizationId: req.organizationId,
       name: { $regex: new RegExp(`^${name}$`, 'i') }
     });
     if (existing) {
@@ -56,6 +57,7 @@ export const createTeamMember = async (req, res) => {
     }
 
     const member = new TeamMember({
+      organizationId: req.organizationId,
       name,
       aliases: aliases || [],
       atlassianEmail,
@@ -81,8 +83,8 @@ export const updateTeamMember = async (req, res) => {
   try {
     const { name, aliases, atlassianEmail, googleEmail, slackUserId, slackDisplayName } = req.body;
 
-    const member = await TeamMember.findByIdAndUpdate(
-      req.params.id,
+    const member = await TeamMember.findOneAndUpdate(
+      { _id: req.params.id, organizationId: req.organizationId },
       {
         name,
         aliases: aliases || [],
@@ -113,7 +115,7 @@ export const updateTeamMember = async (req, res) => {
  */
 export const deleteTeamMember = async (req, res) => {
   try {
-    const member = await TeamMember.findByIdAndDelete(req.params.id);
+    const member = await TeamMember.findOneAndDelete({ _id: req.params.id, organizationId: req.organizationId });
 
     if (!member) {
       return res.status(404).json({ message: 'Team member not found' });
@@ -131,7 +133,7 @@ export const deleteTeamMember = async (req, res) => {
  * Helper: Map assignee name to service IDs
  * Used before sending to n8n
  */
-export const mapAssigneeToServiceIds = async (assigneeName) => {
+export const mapAssigneeToServiceIds = async (assigneeName, organizationId) => {
   if (!assigneeName || assigneeName === 'Unassigned') {
     return {
       name: assigneeName || 'Unassigned',
@@ -141,7 +143,7 @@ export const mapAssigneeToServiceIds = async (assigneeName) => {
     };
   }
 
-  const member = await TeamMember.findByNameOrAlias(assigneeName);
+  const member = await TeamMember.findByNameOrAlias(assigneeName, organizationId);
 
   if (member) {
     return {

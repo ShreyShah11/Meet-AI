@@ -22,6 +22,12 @@ export const config = {
   // CORS
   frontendUrl: process.env.FRONTEND_URL || 'http://localhost:5173',
 
+  // Auth
+  auth: {
+    jwtSecret: process.env.JWT_SECRET || 'meetflow-dev-secret-change-me',
+    jwtExpiresInSeconds: parseInt(process.env.JWT_EXPIRES_IN_SECONDS) || 60 * 60 * 24 * 7
+  },
+
   // Gradio (transcription)
   gradioEndpoint: process.env.GRADIO_ENDPOINT || 'http://localhost:7860',
 

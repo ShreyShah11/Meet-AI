@@ -55,6 +55,13 @@ const actionItemSchema = new mongoose.Schema({
 }, { _id: true });
 
 const summarySchema = new mongoose.Schema({
+  organizationId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Organization',
+    required: false,
+    index: true
+  },
+
   meetingId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Meeting',

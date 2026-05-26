@@ -21,6 +21,8 @@ export const uploadMeeting = async (req, res) => {
 
     // Create meeting record
     const meeting = new Meeting({
+      organizationId: req.organizationId,
+      createdBy: req.user._id,
       title: req.body.title || `Meeting ${new Date().toLocaleDateString()}`,
       status: 'uploading',
       audioPath: req.file.path,
@@ -156,6 +158,8 @@ export const uploadTranscript = async (req, res) => {
 
     // Create meeting record
     const meeting = new Meeting({
+      organizationId: req.organizationId,
+      createdBy: req.user._id,
       title: req.body.title || `Imported Transcript ${new Date().toLocaleDateString()}`,
       status: 'uploading',
       audioPath: null, // No audio
@@ -168,6 +172,7 @@ export const uploadTranscript = async (req, res) => {
 
     // Save transcript immediately
     await Transcript.create({
+      organizationId: req.organizationId,
       meetingId: meeting._id,
       segments,
       speakers: [...new Set(segments.map(s => s.speaker))],
@@ -203,7 +208,12 @@ export const getTranscript = async (req, res) => {
   try {
     const { meetingId } = req.params;
 
-    const transcript = await Transcript.findOne({ meetingId });
+    const meeting = await Meeting.findOne({ _id: meetingId, organizationId: req.organizationId });
+    if (!meeting) {
+      return res.status(404).json({ message: 'Meeting not found' });
+    }
+
+    const transcript = await Transcript.findOne({ meetingId, organizationId: req.organizationId });
 
     if (!transcript) {
       return res.status(404).json({ message: 'Transcript not found' });
@@ -234,7 +244,12 @@ export const getSummary = async (req, res) => {
   try {
     const { meetingId } = req.params;
 
-    const summary = await Summary.findOne({ meetingId });
+    const meeting = await Meeting.findOne({ _id: meetingId, organizationId: req.organizationId });
+    if (!meeting) {
+      return res.status(404).json({ message: 'Meeting not found' });
+    }
+
+    const summary = await Summary.findOne({ meetingId, organizationId: req.organizationId });
 
     if (!summary) {
       return res.status(404).json({ message: 'Summary not found' });
@@ -261,8 +276,13 @@ export const updateTasks = async (req, res) => {
     const { meetingId } = req.params;
     const { tasks } = req.body;
 
+    const meeting = await Meeting.findOne({ _id: meetingId, organizationId: req.organizationId });
+    if (!meeting) {
+      return res.status(404).json({ message: 'Meeting not found' });
+    }
+
     await Summary.findOneAndUpdate(
-      { meetingId },
+      { meetingId, organizationId: req.organizationId },
       { actionItems: tasks, updatedAt: Date.now() }
     );
 
@@ -312,7 +332,12 @@ export const confirmSingleTask = async (req, res) => {
     const { task } = req.body;
 
     // Find the summary and update the specific task
-    const summary = await Summary.findOne({ meetingId });
+    const meeting = await Meeting.findOne({ _id: meetingId, organizationId: req.organizationId });
+    if (!meeting) {
+      return res.status(404).json({ message: 'Meeting not found' });
+    }
+
+    const summary = await Summary.findOne({ meetingId, organizationId: req.organizationId });
     if (!summary) {
       return res.status(404).json({ message: 'Summary not found' });
     }
@@ -338,7 +363,7 @@ export const confirmSingleTask = async (req, res) => {
     // Map assignee name to service IDs
     const { mapAssigneeToServiceIds } = await import('./teamMembersController.js');
     const assigneeName = confirmedTask.assignee?.name || confirmedTask.owner || 'Unassigned';
-    const assigneeMapping = await mapAssigneeToServiceIds(assigneeName);
+    const assigneeMapping = await mapAssigneeToServiceIds(assigneeName, req.organizationId);
 
     // Enrich task with service IDs for n8n
     const enrichedTask = {

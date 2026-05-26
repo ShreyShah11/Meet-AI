@@ -5,11 +5,17 @@
 import mongoose from 'mongoose';
 
 const teamMemberSchema = new mongoose.Schema({
+  organizationId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Organization',
+    required: true,
+    index: true
+  },
+
   // Display name (used for matching with LLM-extracted assignee names)
   name: {
     type: String,
     required: true,
-    unique: true,
     trim: true
   },
 
@@ -52,13 +58,16 @@ teamMemberSchema.pre('save', function(next) {
   next();
 });
 
-// Static method to find member by name or alias
-teamMemberSchema.statics.findByNameOrAlias = async function(name) {
+teamMemberSchema.index({ organizationId: 1, name: 1 }, { unique: true });
+
+// Static method to find member by name or alias within an organization
+teamMemberSchema.statics.findByNameOrAlias = async function(name, organizationId) {
   if (!name) return null;
 
   const normalizedName = name.toLowerCase().trim();
 
   return this.findOne({
+    organizationId,
     $or: [
       { name: { $regex: new RegExp(`^${normalizedName}$`, 'i') } },
       { aliases: { $regex: new RegExp(`^${normalizedName}$`, 'i') } }

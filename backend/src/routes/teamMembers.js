@@ -10,6 +10,7 @@ import {
   updateTeamMember,
   deleteTeamMember
 } from '../controllers/teamMembersController.js';
+import { canManageTeam } from '../middleware/auth.js';
 
 const router = Router();
 
@@ -20,12 +21,12 @@ router.get('/', getAllTeamMembers);
 router.get('/:id', getTeamMember);
 
 // POST /api/team-members - Create team member
-router.post('/', createTeamMember);
+router.post('/', canManageTeam, createTeamMember);
 
 // PUT /api/team-members/:id - Update team member
-router.put('/:id', updateTeamMember);
+router.put('/:id', canManageTeam, updateTeamMember);
 
 // DELETE /api/team-members/:id - Delete team member
-router.delete('/:id', deleteTeamMember);
+router.delete('/:id', canManageTeam, deleteTeamMember);
 
 export default router;

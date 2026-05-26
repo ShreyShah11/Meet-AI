@@ -7,8 +7,9 @@ import cors from 'cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { config } from './config/env.js';
-import { meetingsRoutes, jobsRoutes, teamMembersRoutes } from './routes/index.js';
+import { meetingsRoutes, jobsRoutes, teamMembersRoutes, authRoutes, usersRoutes } from './routes/index.js';
 import { createProxyMiddleware } from 'http-proxy-middleware';
+import { requireAuth } from './middleware/auth.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -29,7 +30,7 @@ app.use(cors({
 
 // Proxy to Python Bot Service
 // Must be before body parsers to ensure stream is not consumed
-app.use('/api/bot', createProxyMiddleware({
+app.use('/api/bot', requireAuth, createProxyMiddleware({
   target: 'http://127.0.0.1:5001',
   changeOrigin: true,
   pathRewrite: {
@@ -65,9 +66,11 @@ if (config.isDev) {
 // ROUTES
 // ========================================
 
-app.use('/api/meetings', meetingsRoutes);
-app.use('/api/jobs', jobsRoutes);
-app.use('/api/team-members', teamMembersRoutes);
+app.use('/api/auth', authRoutes);
+app.use('/api/meetings', requireAuth, meetingsRoutes);
+app.use('/api/jobs', requireAuth, jobsRoutes);
+app.use('/api/team-members', requireAuth, teamMembersRoutes);
+app.use('/api/users', requireAuth, usersRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

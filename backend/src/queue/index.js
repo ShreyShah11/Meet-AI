@@ -55,6 +55,11 @@ export const enqueueProcessingJob = async (jobData) => {
 const processJob = async (jobId, meetingId, audioPath, type = 'audio') => {
   try {
     let segments = [];
+    const meeting = await Meeting.findById(meetingId);
+    if (!meeting) {
+      throw new Error('Meeting not found');
+    }
+    const organizationId = meeting.organizationId;
 
     // Step 1 & 2 & 3: Audio Processing (Skip if transcript-only)
     if (type !== 'transcript-only') {
@@ -92,7 +97,7 @@ const processJob = async (jobId, meetingId, audioPath, type = 'audio') => {
 
         await Transcript.findOneAndUpdate(
           { meetingId },
-          { meetingId, segments, speakers, duration },
+          { organizationId, meetingId, segments, speakers, duration },
           { upsert: true, new: true }
         );
         console.log(`[Processor] 💾 Saved ${segments.length} segments, ${speakers.length} speakers`);
@@ -134,6 +139,7 @@ const processJob = async (jobId, meetingId, audioPath, type = 'audio') => {
     await Summary.findOneAndUpdate(
       { meetingId },
       {
+        organizationId,
         meetingId,
         executive: mergedResult.summary,  // Raw 'summary' -> stored as 'executive'
         topics: [],
