@@ -11,7 +11,7 @@ export const config = {
   isDev: process.env.NODE_ENV !== 'production',
 
   // MongoDB
-  mongoUri: process.env.MONGODB_URI || 'mongodb://localhost:27017/meetflow',
+  mongoUri: process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/meetflow',
 
   // Redis
   redis: {

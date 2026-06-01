@@ -36,6 +36,35 @@ const userSchema = new mongoose.Schema({
     enum: ['active', 'disabled'],
     default: 'active'
   },
+  // Integration credentials and identifiers
+  jiraEmail: {
+    type: String,
+    trim: true,
+    lowercase: true,
+    default: null
+  },
+  slackUserId: {
+    type: String,
+    trim: true,
+    default: null
+  },
+  slackDisplayName: {
+    type: String,
+    trim: true,
+    default: null
+  },
+  googleEmail: {
+    type: String,
+    trim: true,
+    lowercase: true,
+    default: null
+  },
+  atlassianEmail: {
+    type: String,
+    trim: true,
+    lowercase: true,
+    default: null
+  },
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now }
 });

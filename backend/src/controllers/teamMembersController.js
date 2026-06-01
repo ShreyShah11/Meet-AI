@@ -2,7 +2,58 @@
  * TeamMembers Controller
  * CRUD operations for team member service mappings
  */
-import { TeamMember } from '../models/index.js';
+import { TeamMember, User } from '../models/index.js';
+
+const syncTeamMembersFromUsers = async (organizationId) => {
+  const users = await User.find({ organizationId, status: 'active' });
+
+  await Promise.all(users.map(async (user) => {
+    const existingMember = await TeamMember.findOne({
+      organizationId: user.organizationId,
+      name: user.name
+    });
+
+    if (!existingMember) {
+      await TeamMember.create({
+        organizationId: user.organizationId,
+        name: user.name,
+        aliases: [],
+        atlassianEmail: user.atlassianEmail || user.jiraEmail || null,
+        googleEmail: user.googleEmail || null,
+        slackUserId: user.slackUserId || null,
+        slackDisplayName: user.slackDisplayName || null
+      });
+      return;
+    }
+
+    let hasChanges = false;
+
+    if (!existingMember.atlassianEmail && (user.atlassianEmail || user.jiraEmail)) {
+      existingMember.atlassianEmail = user.atlassianEmail || user.jiraEmail;
+      hasChanges = true;
+    }
+
+    if (!existingMember.googleEmail && user.googleEmail) {
+      existingMember.googleEmail = user.googleEmail;
+      hasChanges = true;
+    }
+
+    if (!existingMember.slackUserId && user.slackUserId) {
+      existingMember.slackUserId = user.slackUserId;
+      hasChanges = true;
+    }
+
+    if (!existingMember.slackDisplayName && user.slackDisplayName) {
+      existingMember.slackDisplayName = user.slackDisplayName;
+      hasChanges = true;
+    }
+
+    if (hasChanges) {
+      existingMember.updatedAt = Date.now();
+      await existingMember.save();
+    }
+  }));
+};
 
 /**
  * GET /api/team-members
@@ -10,6 +61,7 @@ import { TeamMember } from '../models/index.js';
  */
 export const getAllTeamMembers = async (req, res) => {
   try {
+    await syncTeamMembersFromUsers(req.organizationId);
     const members = await TeamMember.find({ organizationId: req.organizationId }).sort({ name: 1 });
     res.json(members);
   } catch (error) {
@@ -81,25 +133,26 @@ export const createTeamMember = async (req, res) => {
  */
 export const updateTeamMember = async (req, res) => {
   try {
-    const { name, aliases, atlassianEmail, googleEmail, slackUserId, slackDisplayName } = req.body;
+    const { aliases, atlassianEmail, googleEmail, slackUserId, slackDisplayName } = req.body;
 
-    const member = await TeamMember.findOneAndUpdate(
-      { _id: req.params.id, organizationId: req.organizationId },
-      {
-        name,
-        aliases: aliases || [],
-        atlassianEmail,
-        googleEmail,
-        slackUserId,
-        slackDisplayName,
-        updatedAt: Date.now()
-      },
-      { new: true }
-    );
+    const member = await TeamMember.findOne({ _id: req.params.id, organizationId: req.organizationId });
 
     if (!member) {
       return res.status(404).json({ message: 'Team member not found' });
     }
+
+    if (aliases !== undefined) {
+      member.aliases = Array.isArray(aliases)
+        ? aliases.filter(Boolean)
+        : [];
+    }
+
+    member.atlassianEmail = atlassianEmail || null;
+    member.googleEmail = googleEmail || null;
+    member.slackUserId = slackUserId || null;
+    member.slackDisplayName = slackDisplayName || null;
+    member.updatedAt = Date.now();
+    await member.save();
 
     console.log(`[TeamMembers] Updated: ${member.name}`);
     res.json(member);

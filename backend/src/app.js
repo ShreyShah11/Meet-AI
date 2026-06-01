@@ -24,7 +24,7 @@ const app = express();
 
 // CORS
 app.use(cors({
-  origin: config.frontendUrl,
+  origin: config.isDev ? /^http:\/\/localhost:\d+$/ : config.frontendUrl,
   credentials: true
 }));
 

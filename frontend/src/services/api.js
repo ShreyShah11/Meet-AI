@@ -10,6 +10,39 @@ const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api'
 // Toggle to use mock responses (set to false to use real backend)
 const USE_MOCKS = false;
 
+const TOKEN_KEY = 'meetflow_token';
+const USER_KEY = 'meetflow_user';
+const ORG_ID_KEY = 'organizationId';
+
+export const getToken = () => typeof window !== 'undefined' ? localStorage.getItem(TOKEN_KEY) : null;
+export const setToken = (token) => {
+  if (typeof window === 'undefined') return;
+  localStorage.setItem(TOKEN_KEY, token);
+};
+
+export const getUser = () => {
+  if (typeof window === 'undefined') return null;
+  const user = localStorage.getItem(USER_KEY);
+  return user ? JSON.parse(user) : null;
+};
+
+export const setUser = (user) => {
+  if (typeof window === 'undefined') return;
+  localStorage.setItem(USER_KEY, JSON.stringify(user));
+  if (user && user.organizationId) {
+    localStorage.setItem(ORG_ID_KEY, user.organizationId);
+  }
+};
+
+export const clearAuth = () => {
+  if (typeof window === 'undefined') return;
+  localStorage.removeItem(TOKEN_KEY);
+  localStorage.removeItem(USER_KEY);
+  localStorage.removeItem(ORG_ID_KEY);
+};
+
+export const isAuthenticated = () => !!getToken();
+
 // Simulated network delay for mocks
 const MOCK_DELAY = 800;
 
@@ -24,9 +57,11 @@ const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 const apiRequest = async (endpoint, options = {}) => {
   const url = `${API_BASE_URL}${endpoint}`;
 
+  const authToken = getToken();
   const config = {
     headers: {
       'Content-Type': 'application/json',
+      ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
       ...options.headers,
     },
     ...options,
@@ -309,6 +344,93 @@ export const deleteTeamMember = async (id) => {
   return apiRequest(`/team-members/${id}`, {
     method: 'DELETE',
   });
+};
+
+export const login = async (email, password) => {
+  const response = await apiRequest('/auth/login', {
+    method: 'POST',
+    body: JSON.stringify({ email, password }),
+  });
+
+  const { token, user } = response;
+  if (token) {
+    setToken(token);
+  }
+  if (user) {
+    setUser(user);
+  }
+  return response;
+};
+
+/**
+ * Create a new organization
+ */
+export const createOrganization = async (name) => {
+  return apiRequest('/auth/create-organization', {
+    method: 'POST',
+    body: JSON.stringify({ name }),
+  });
+};
+
+/**
+ * Create owner/admin user for organization
+ */
+export const createOwnerUser = async (organizationId, name, email, password) => {
+  const response = await apiRequest('/auth/create-owner-user', {
+    method: 'POST',
+    body: JSON.stringify({ organizationId, name, email, password }),
+  });
+
+  const { token, user } = response;
+  if (token) {
+    setToken(token);
+  }
+  if (user) {
+    setUser(user);
+  }
+  return response;
+};
+
+/**
+ * Create regular user with integration details
+ */
+export const createUser = async (organizationId, name, email, password, integrations = {}) => {
+  const response = await apiRequest('/auth/create-user', {
+    method: 'POST',
+    body: JSON.stringify({
+      organizationId,
+      name,
+      email,
+      password,
+      jiraEmail: integrations.jiraEmail || null,
+      slackUserId: integrations.slackUserId || null,
+      slackDisplayName: integrations.slackDisplayName || null,
+      googleEmail: integrations.googleEmail || null,
+      atlassianEmail: integrations.atlassianEmail || null,
+    }),
+  });
+
+  const { token, user } = response;
+  if (token) {
+    setToken(token);
+  }
+  if (user) {
+    setUser(user);
+  }
+  return response;
+};
+
+/**
+ * Delete an organization (permanent action)
+ */
+export const deleteOrganization = async (organizationId) => {
+  return apiRequest(`/auth/organization/${organizationId}`, {
+    method: 'DELETE',
+  });
+};
+
+export const logout = () => {
+  clearAuth();
 };
 
 // ============================================

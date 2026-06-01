@@ -7,7 +7,11 @@ import { config } from './env.js';
 
 export const connectDB = async () => {
   try {
-    const conn = await mongoose.connect(config.mongoUri);
+    const conn = await mongoose.connect(config.mongoUri, {
+      serverSelectionTimeoutMS: 10000,
+      connectTimeoutMS: 10000,
+      socketTimeoutMS: 45000,
+    });
     console.log(`[DB] MongoDB connected: ${conn.connection.host}`);
 
     mongoose.connection.on('error', (err) => {
@@ -21,6 +25,8 @@ export const connectDB = async () => {
     return conn;
   } catch (error) {
     console.error('[DB] Connection failed:', error.message);
+    console.error('[DB] MongoDB URI:', config.mongoUri);
+    console.error('[DB] Make sure MongoDB is running and accessible, or set MONGODB_URI in your .env file.');
     process.exit(1);
   }
 };

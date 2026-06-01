@@ -2,13 +2,10 @@
  * Server Entry Point
  * Starts the Express server
  */
+import http from 'http';
 import app from './app.js';
 import { config } from './config/env.js';
 import { connectDB } from './config/db.js';
-
-/**
- * Start server
- */
 import { startBotService, stopBotService } from './bot_process.js';
 
 /**
@@ -16,26 +13,38 @@ import { startBotService, stopBotService } from './bot_process.js';
  */
 const startServer = async () => {
   try {
-    // Connect to MongoDB
     await connectDB();
 
-    // Start Python Bot Service
-    startBotService();
+    const server = http.createServer(app);
 
-    // Start listening
-    const server = app.listen(config.port, () => {
+    server.on('error', (error) => {
+      stopBotService();
+
+      if (error.code === 'EADDRINUSE') {
+        console.error(`[Server] Port ${config.port} is already in use.`);
+        console.error('[Server] Stop the existing backend process or run with another port: $env:PORT=3002; npm run dev');
+      } else {
+        console.error('[Server] Listen error:', error);
+      }
+
+      process.exit(1);
+    });
+
+    server.listen(config.port, () => {
+      // Start Python Bot Service only after the API port is available.
+      startBotService();
+
       console.log(`
-  ╔════════════════════════════════════════╗
-  ║   MeetFlow API Server                  ║
-  ║   Port: ${config.port}                            ║
-  ║   Environment: ${config.nodeEnv.padEnd(19)}║
-  ╚════════════════════════════════════════╝
+  ==========================================
+     MeetFlow API Server
+     Port: ${config.port}
+     Environment: ${config.nodeEnv}
+  ==========================================
       `);
       console.log(`[Server] API: http://localhost:${config.port}/api`);
       console.log(`[Server] Health: http://localhost:${config.port}/api/health`);
     });
 
-    // Graceful shutdown
     const shutdown = () => {
       console.log('[Server] Shutting down...');
       stopBotService();
@@ -47,9 +56,9 @@ const startServer = async () => {
 
     process.on('SIGTERM', shutdown);
     process.on('SIGINT', shutdown);
-
   } catch (error) {
     console.error('[Server] Failed to start:', error);
+    stopBotService();
     process.exit(1);
   }
 };

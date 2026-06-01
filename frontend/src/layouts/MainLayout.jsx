@@ -1,12 +1,15 @@
 import { useState, useEffect } from 'react';
-import { Outlet, Link } from 'react-router-dom';
+import { Outlet, Link, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
+import { isAuthenticated, clearAuth } from '../services/api';
 
 /**
  * MainLayout - Primary layout wrapper for all pages
  * Provides consistent structure with header and main content area
  */
 const MainLayout = () => {
+  const navigate = useNavigate();
+
   // Theme state - check localStorage and system preference
   const [isDark, setIsDark] = useState(() => {
     if (typeof window !== 'undefined') {
@@ -28,6 +31,11 @@ const MainLayout = () => {
     }
   }, [isDark]);
 
+  const handleLogout = () => {
+    clearAuth();
+    navigate('/login');
+  };
+
   // Toggle theme
   const toggleTheme = () => {
     setIsDark(!isDark);
@@ -41,7 +49,7 @@ const MainLayout = () => {
           <div className="flex items-center justify-between h-16">
             {/* Logo */}
             <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-accent to-blue-600 flex items-center justify-center">
+              <div className="w-8 h-8 rounded-xl bg-linear-to-br from-accent to-blue-600 flex items-center justify-center">
                 <svg
                   className="w-5 h-5 text-white"
                   fill="none"
@@ -122,6 +130,15 @@ const MainLayout = () => {
                 )}
               </AnimatePresence>
             </button>
+
+            {isAuthenticated() && (
+              <button
+                onClick={handleLogout}
+                className="rounded-xl px-3 py-2 text-sm font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-white/10 transition-colors"
+              >
+                Sign out
+              </button>
+            )}
             </div>
           </div>
         </div>

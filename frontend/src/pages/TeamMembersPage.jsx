@@ -1,29 +1,45 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { motion, AnimatePresence } from 'framer-motion';
-import { getTeamMembers, createTeamMember, updateTeamMember, deleteTeamMember } from '../services/api';
+import { motion } from 'framer-motion';
+import { getTeamMembers, updateTeamMember } from '../services/api';
 
-/**
- * TeamMembersPage - Manage team member service mappings
- */
+const EMPTY_FORM = {
+  aliases: '',
+  atlassianEmail: '',
+  googleEmail: '',
+  slackUserId: '',
+  slackDisplayName: ''
+};
+
+const detailItems = [
+  { key: 'atlassianEmail', label: 'Jira / Atlassian', accent: 'bg-blue-500/10 text-blue-500', badge: 'J' },
+  { key: 'googleEmail', label: 'Google Email', accent: 'bg-green-500/10 text-green-500', badge: 'G' },
+  { key: 'slackUserId', label: 'Slack User ID', accent: 'bg-amber-500/10 text-amber-600', badge: 'S' },
+  { key: 'slackDisplayName', label: 'Slack Display Name', accent: 'bg-pink-500/10 text-pink-500', badge: '@' }
+];
+
+const buildFormState = (member) => ({
+  aliases: (member.aliases || []).join(', '),
+  atlassianEmail: member.atlassianEmail || '',
+  googleEmail: member.googleEmail || '',
+  slackUserId: member.slackUserId || '',
+  slackDisplayName: member.slackDisplayName || ''
+});
+
+const parseAliases = (value) => value
+  .split(',')
+  .map((alias) => alias.trim())
+  .filter(Boolean);
+
 const TeamMembersPage = () => {
   const [members, setMembers] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const [editingId, setEditingId] = useState(null);
-  const [isAdding, setIsAdding] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
+  const [formState, setFormState] = useState(EMPTY_FORM);
+  const [saveError, setSaveError] = useState(null);
+  const [savingId, setSavingId] = useState(null);
 
-  // Form state for new/edit member
-  const [formData, setFormData] = useState({
-    name: '',
-    atlassianEmail: '',
-    googleEmail: '',
-    slackUserId: '',
-    slackDisplayName: ''
-  });
-
-  // Fetch members on mount
   useEffect(() => {
     fetchMembers();
   }, []);
@@ -31,6 +47,7 @@ const TeamMembersPage = () => {
   const fetchMembers = async () => {
     try {
       setIsLoading(true);
+      setError(null);
       const data = await getTeamMembers();
       setMembers(data);
     } catch (err) {
@@ -40,73 +57,46 @@ const TeamMembersPage = () => {
     }
   };
 
-  const handleAdd = () => {
-    setIsAdding(true);
-    setEditingId(null);
-    setFormData({
-      name: '',
-      atlassianEmail: '',
-      googleEmail: '',
-      slackUserId: '',
-      slackDisplayName: ''
-    });
-  };
-
-  const handleEdit = (member) => {
+  const startEditing = (member) => {
     setEditingId(member._id);
-    setIsAdding(false);
-    setFormData({
-      name: member.name,
-      atlassianEmail: member.atlassianEmail || '',
-      googleEmail: member.googleEmail || '',
-      slackUserId: member.slackUserId || '',
-      slackDisplayName: member.slackDisplayName || ''
-    });
+    setFormState(buildFormState(member));
+    setSaveError(null);
   };
 
-  const handleCancel = () => {
-    setIsAdding(false);
+  const stopEditing = () => {
     setEditingId(null);
-    setFormData({
-      name: '',
-      atlassianEmail: '',
-      googleEmail: '',
-      slackUserId: '',
-      slackDisplayName: ''
-    });
+    setFormState(EMPTY_FORM);
+    setSaveError(null);
   };
 
-  const handleSave = async () => {
-    if (!formData.name.trim()) {
-      alert('Name is required');
-      return;
-    }
+  const handleFieldChange = (field, value) => {
+    setFormState((current) => ({
+      ...current,
+      [field]: value
+    }));
+  };
 
-    setIsSaving(true);
+  const handleSave = async (memberId) => {
     try {
-      if (isAdding) {
-        const newMember = await createTeamMember(formData);
-        setMembers(prev => [...prev, newMember]);
-      } else if (editingId) {
-        const updated = await updateTeamMember(editingId, formData);
-        setMembers(prev => prev.map(m => m._id === editingId ? updated : m));
-      }
-      handleCancel();
+      setSavingId(memberId);
+      setSaveError(null);
+
+      const updatedMember = await updateTeamMember(memberId, {
+        aliases: parseAliases(formState.aliases),
+        atlassianEmail: formState.atlassianEmail.trim(),
+        googleEmail: formState.googleEmail.trim(),
+        slackUserId: formState.slackUserId.trim(),
+        slackDisplayName: formState.slackDisplayName.trim()
+      });
+
+      setMembers((current) => current.map((member) => (
+        member._id === memberId ? updatedMember : member
+      )));
+      stopEditing();
     } catch (err) {
-      alert('Failed to save: ' + err.message);
+      setSaveError(err.message);
     } finally {
-      setIsSaving(false);
-    }
-  };
-
-  const handleDelete = async (id) => {
-    if (!confirm('Delete this team member?')) return;
-
-    try {
-      await deleteTeamMember(id);
-      setMembers(prev => prev.filter(m => m._id !== id));
-    } catch (err) {
-      alert('Failed to delete: ' + err.message);
+      setSavingId(null);
     }
   };
 
@@ -126,8 +116,7 @@ const TeamMembersPage = () => {
   }
 
   return (
-    <div className="max-w-4xl mx-auto">
-      {/* Header */}
+    <div className="max-w-5xl mx-auto">
       <div className="mb-8">
         <Link to="/" className="inline-flex items-center gap-2 text-secondary hover:text-primary transition-colors mb-4">
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -136,186 +125,181 @@ const TeamMembersPage = () => {
           Back to Home
         </Link>
 
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <h1 className="text-3xl font-bold text-primary mb-2">Team Members</h1>
-            <p className="text-secondary">Configure service mappings for task assignments</p>
+            <p className="text-secondary">View and update the service details used for Jira, Slack, Google, and task routing.</p>
           </div>
 
-          {!isAdding && !editingId && (
-            <button onClick={handleAdd} className="btn-primary flex items-center gap-2">
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-              </svg>
-              Add Member
-            </button>
-          )}
+          <button
+            onClick={fetchMembers}
+            className="inline-flex items-center justify-center rounded-xl border border-[var(--border-color)] px-4 py-2 text-sm font-medium text-primary hover:border-accent/40 hover:bg-accent/5 transition-colors"
+          >
+            Refresh
+          </button>
         </div>
       </div>
 
       {error && (
-        <div className="mb-6 p-4 rounded-xl bg-red-500/10 text-red-500 border border-red-500/20">
+        <div className="mb-6 rounded-xl border border-red-500/20 bg-red-500/10 p-4 text-red-500">
           {error}
         </div>
       )}
 
-      {/* Add/Edit Form */}
-      <AnimatePresence>
-        {(isAdding || editingId) && (
-          <motion.div
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            className="mb-6 p-6 rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-color)]"
-          >
-            <h2 className="text-lg font-semibold text-primary mb-4">
-              {isAdding ? 'Add Team Member' : 'Edit Team Member'}
-            </h2>
+      <div className="mb-6 rounded-xl border border-blue-500/20 bg-blue-500/10 p-4 text-sm text-blue-700 dark:text-blue-300">
+        Member records are created automatically when users join the organization. You can edit the integration details here without recreating the user.
+      </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm text-secondary mb-1">Display Name *</label>
-                <input
-                  type="text"
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  className="w-full px-4 py-2 rounded-lg bg-[var(--bg-base)] border border-[var(--border-color)] text-primary focus:border-accent outline-none"
-                  placeholder="e.g., Jainil"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm text-secondary mb-1">Slack Display Name</label>
-                <input
-                  type="text"
-                  value={formData.slackDisplayName}
-                  onChange={(e) => setFormData({ ...formData, slackDisplayName: e.target.value })}
-                  className="w-full px-4 py-2 rounded-lg bg-[var(--bg-base)] border border-[var(--border-color)] text-primary focus:border-accent outline-none"
-                  placeholder="@jainil"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm text-secondary mb-1">Atlassian Email (Jira)</label>
-                <input
-                  type="email"
-                  value={formData.atlassianEmail}
-                  onChange={(e) => setFormData({ ...formData, atlassianEmail: e.target.value })}
-                  className="w-full px-4 py-2 rounded-lg bg-[var(--bg-base)] border border-[var(--border-color)] text-primary focus:border-accent outline-none"
-                  placeholder="jainil@example.com"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm text-secondary mb-1">Google Email (Calendar)</label>
-                <input
-                  type="email"
-                  value={formData.googleEmail}
-                  onChange={(e) => setFormData({ ...formData, googleEmail: e.target.value })}
-                  className="w-full px-4 py-2 rounded-lg bg-[var(--bg-base)] border border-[var(--border-color)] text-primary focus:border-accent outline-none"
-                  placeholder="jainil@gmail.com"
-                />
-              </div>
-
-              <div className="md:col-span-2">
-                <label className="block text-sm text-secondary mb-1">Slack User ID</label>
-                <input
-                  type="text"
-                  value={formData.slackUserId}
-                  onChange={(e) => setFormData({ ...formData, slackUserId: e.target.value })}
-                  className="w-full px-4 py-2 rounded-lg bg-[var(--bg-base)] border border-[var(--border-color)] text-primary focus:border-accent outline-none"
-                  placeholder="U01ABC123XYZ (find in Slack profile)"
-                />
-                <p className="text-xs text-secondary mt-1">
-                  Find this in Slack: Click profile → "..." → Copy member ID
-                </p>
-              </div>
-            </div>
-
-            <div className="flex gap-3 mt-6">
-              <button
-                onClick={handleSave}
-                disabled={isSaving}
-                className="btn-primary"
-              >
-                {isSaving ? 'Saving...' : 'Save'}
-              </button>
-              <button
-                onClick={handleCancel}
-                className="px-6 py-2 rounded-lg border border-[var(--border-color)] text-secondary hover:text-primary transition-colors"
-              >
-                Cancel
-              </button>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Members List */}
       {members.length === 0 ? (
-        <div className="text-center py-12 text-secondary">
+        <div className="py-12 text-center text-secondary">
           <svg className="w-16 h-16 mx-auto mb-4 text-secondary/50" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0z" />
           </svg>
-          <p>No team members yet. Add your first member to get started!</p>
+          <p>No team members yet. Invite users to create team member records first.</p>
         </div>
       ) : (
-        <div className="space-y-3">
-          {members.map((member) => (
-            <motion.div
-              key={member._id}
-              layout
-              className="p-4 rounded-xl bg-[var(--bg-surface)] border border-[var(--border-color)] hover:border-accent/30 transition-colors"
-            >
-              <div className="flex items-start justify-between">
-                <div className="flex-1">
-                  <h3 className="font-semibold text-primary text-lg">{member.name}</h3>
+        <div className="space-y-4">
+          {members.map((member) => {
+            const isEditing = editingId === member._id;
+            const aliases = member.aliases?.length ? member.aliases.join(', ') : 'No aliases';
 
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mt-3 text-sm">
-                    {member.atlassianEmail && (
-                      <div className="flex items-center gap-2 text-secondary">
-                        <span className="w-5 h-5 rounded bg-blue-500/10 flex items-center justify-center text-blue-500 text-xs font-bold">J</span>
-                        {member.atlassianEmail}
-                      </div>
-                    )}
+            return (
+              <motion.div
+                key={member._id}
+                layout
+                className="overflow-hidden rounded-2xl border border-[var(--border-color)] bg-[var(--bg-surface)] shadow-sm"
+              >
+                <div className="border-b border-[var(--border-color)]/80 px-5 py-4">
+                  <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                    <div>
+                      <h2 className="text-xl font-semibold text-primary">{member.name}</h2>
+                      <p className="mt-1 text-sm text-secondary">Aliases: {aliases}</p>
+                    </div>
 
-                    {member.googleEmail && (
-                      <div className="flex items-center gap-2 text-secondary">
-                        <span className="w-5 h-5 rounded bg-green-500/10 flex items-center justify-center text-green-500 text-xs font-bold">G</span>
-                        {member.googleEmail}
-                      </div>
-                    )}
-
-                    {member.slackUserId && (
-                      <div className="flex items-center gap-2 text-secondary">
-                        <span className="w-5 h-5 rounded bg-purple-500/10 flex items-center justify-center text-purple-500 text-xs font-bold">S</span>
-                        {member.slackUserId}
-                      </div>
-                    )}
+                    <div className="flex items-center gap-2">
+                      {isEditing ? (
+                        <>
+                          <button
+                            onClick={stopEditing}
+                            className="rounded-xl border border-[var(--border-color)] px-3 py-2 text-sm font-medium text-secondary hover:bg-accent/5 transition-colors"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            onClick={() => handleSave(member._id)}
+                            disabled={savingId === member._id}
+                            className="rounded-xl bg-accent px-3 py-2 text-sm font-medium text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-70"
+                          >
+                            {savingId === member._id ? 'Saving...' : 'Save'}
+                          </button>
+                        </>
+                      ) : (
+                        <button
+                          onClick={() => startEditing(member)}
+                          className="rounded-xl bg-accent px-3 py-2 text-sm font-medium text-white hover:opacity-90"
+                        >
+                          Edit Details
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </div>
 
-                <div className="flex gap-2 ml-4">
-                  <button
-                    onClick={() => handleEdit(member)}
-                    className="p-2 rounded-lg hover:bg-accent/10 text-secondary hover:text-accent transition-colors"
-                  >
-                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                    </svg>
-                  </button>
-                  <button
-                    onClick={() => handleDelete(member._id)}
-                    className="p-2 rounded-lg hover:bg-red-500/10 text-secondary hover:text-red-500 transition-colors"
-                  >
-                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                    </svg>
-                  </button>
+                <div className="p-5">
+                  {isEditing ? (
+                    <div className="space-y-4">
+                      {saveError && (
+                        <div className="rounded-xl border border-red-500/20 bg-red-500/10 p-3 text-sm text-red-500">
+                          {saveError}
+                        </div>
+                      )}
+
+                      <div className="grid gap-4 sm:grid-cols-2">
+                        <label className="block">
+                          <span className="mb-2 block text-sm font-medium text-primary">Jira / Atlassian Email</span>
+                          <input
+                            type="email"
+                            value={formState.atlassianEmail}
+                            onChange={(event) => handleFieldChange('atlassianEmail', event.target.value)}
+                            className="w-full rounded-xl border border-[var(--border-color)] bg-transparent px-3 py-2 text-sm text-primary outline-none transition focus:border-accent"
+                            placeholder="name@company.com"
+                          />
+                        </label>
+
+                        <label className="block">
+                          <span className="mb-2 block text-sm font-medium text-primary">Google Email</span>
+                          <input
+                            type="email"
+                            value={formState.googleEmail}
+                            onChange={(event) => handleFieldChange('googleEmail', event.target.value)}
+                            className="w-full rounded-xl border border-[var(--border-color)] bg-transparent px-3 py-2 text-sm text-primary outline-none transition focus:border-accent"
+                            placeholder="name@company.com"
+                          />
+                        </label>
+
+                        <label className="block">
+                          <span className="mb-2 block text-sm font-medium text-primary">Slack User ID</span>
+                          <input
+                            type="text"
+                            value={formState.slackUserId}
+                            onChange={(event) => handleFieldChange('slackUserId', event.target.value)}
+                            className="w-full rounded-xl border border-[var(--border-color)] bg-transparent px-3 py-2 text-sm text-primary outline-none transition focus:border-accent"
+                            placeholder="U01ABC123"
+                          />
+                        </label>
+
+                        <label className="block">
+                          <span className="mb-2 block text-sm font-medium text-primary">Slack Display Name</span>
+                          <input
+                            type="text"
+                            value={formState.slackDisplayName}
+                            onChange={(event) => handleFieldChange('slackDisplayName', event.target.value)}
+                            className="w-full rounded-xl border border-[var(--border-color)] bg-transparent px-3 py-2 text-sm text-primary outline-none transition focus:border-accent"
+                            placeholder="@teammate"
+                          />
+                        </label>
+                      </div>
+
+                      <label className="block">
+                        <span className="mb-2 block text-sm font-medium text-primary">Aliases</span>
+                        <input
+                          type="text"
+                          value={formState.aliases}
+                          onChange={(event) => handleFieldChange('aliases', event.target.value)}
+                          className="w-full rounded-xl border border-[var(--border-color)] bg-transparent px-3 py-2 text-sm text-primary outline-none transition focus:border-accent"
+                          placeholder="Comma separated names, nicknames, or short forms"
+                        />
+                      </label>
+                    </div>
+                  ) : (
+                    <div className="grid gap-3 md:grid-cols-2">
+                      {detailItems.map((item) => (
+                        <div
+                          key={item.key}
+                          className="flex min-h-20 items-start gap-3 rounded-xl border border-[var(--border-color)] bg-accent/5 p-4"
+                        >
+                          <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-sm font-semibold ${item.accent}`}>
+                            {item.badge}
+                          </span>
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium text-primary">{item.label}</p>
+                            <p className="mt-1 break-all text-sm text-secondary">
+                              {member[item.key] || 'Not set'}
+                            </p>
+                          </div>
+                        </div>
+                      ))}
+
+                      <div className="rounded-xl border border-[var(--border-color)] bg-accent/5 p-4 md:col-span-2">
+                        <p className="text-sm font-medium text-primary">Aliases</p>
+                        <p className="mt-1 text-sm text-secondary">{aliases}</p>
+                      </div>
+                    </div>
+                  )}
                 </div>
-              </div>
-            </motion.div>
-          ))}
+              </motion.div>
+            );
+          })}
         </div>
       )}
     </div>

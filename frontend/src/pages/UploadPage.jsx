@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { uploadMeeting, uploadTranscript } from '../services/api';
+import { uploadMeeting, uploadTranscript, deleteOrganization, clearAuth } from '../services/api';
 import { joinMeeting, getBotStatus, getTranscript } from '../services/botService';
 
 /**
@@ -19,6 +19,8 @@ const UploadPage = () => {
   const [isDragging, setIsDragging] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [error, setError] = useState(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   // Bot State
   const [meetingUrl, setMeetingUrl] = useState('');
@@ -162,6 +164,26 @@ const UploadPage = () => {
     } catch (err) {
       setError(err.message || 'Upload failed. Please try again.');
       setIsUploading(false);
+    }
+  };
+
+  // Handle delete organization
+  const handleDeleteOrganization = async () => {
+    setIsDeleting(true);
+    try {
+      const organizationId = localStorage.getItem('organizationId');
+      if (!organizationId) {
+        setError('Organization ID not found');
+        return;
+      }
+      await deleteOrganization(organizationId);
+      clearAuth();
+      navigate('/login', { replace: true });
+    } catch (err) {
+      setError(err.message || 'Failed to delete organization');
+    } finally {
+      setIsDeleting(false);
+      setShowDeleteConfirm(false);
     }
   };
 
@@ -675,6 +697,90 @@ const UploadPage = () => {
             {uploadType === 'bot' && '💡 Tip: Ensure the bot is admitted to the meeting'}
           </p>
         </motion.div>
+
+        {/* Organization Settings */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.5 }}
+          className="mt-12 pt-8 border-t border-[var(--border-color)]"
+        >
+          <p className="text-sm font-semibold text-secondary uppercase tracking-widest mb-4">Organization Settings</p>
+          <button
+            onClick={() => setShowDeleteConfirm(true)}
+            className="flex items-center gap-2 px-6 py-3 rounded-xl border border-red-500/30 bg-red-500/10 hover:bg-red-500/20 text-red-400 hover:text-red-300 font-semibold text-sm transition"
+          >
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+            </svg>
+            Delete Organization
+          </button>
+        </motion.div>
+
+        {/* Delete Confirmation Modal */}
+        <AnimatePresence>
+          {showDeleteConfirm && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 bg-black/50 flex items-center justify-center px-4 z-50"
+              onClick={() => setShowDeleteConfirm(false)}
+            >
+              <motion.div
+                initial={{ scale: 0.95, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.95, opacity: 0 }}
+                onClick={(e) => e.stopPropagation()}
+                className="bg-[var(--bg-surface)] border border-red-500/20 rounded-2xl p-6 max-w-sm w-full shadow-2xl"
+              >
+                <div className="flex items-start gap-4">
+                  <div className="flex-shrink-0 w-12 h-12 rounded-full bg-red-500/10 flex items-center justify-center">
+                    <svg className="w-6 h-6 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4v2m0 0v0" />
+                    </svg>
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="text-lg font-semibold text-primary mb-2">Delete Organization?</h3>
+                    <p className="text-sm text-secondary mb-4">
+                      This will permanently delete your organization and all associated team members and data. This action cannot be undone.
+                    </p>
+                    <div className="space-y-2">
+                      <button
+                        onClick={handleDeleteOrganization}
+                        disabled={isDeleting}
+                        className="w-full px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 disabled:bg-red-400 text-white font-semibold text-sm transition flex items-center justify-center gap-2"
+                      >
+                        {isDeleting ? (
+                          <>
+                            <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                            Deleting...
+                          </>
+                        ) : (
+                          <>
+                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                            Yes, Delete Organization
+                          </>
+                        )}
+                      </button>
+                      <button
+                        onClick={() => setShowDeleteConfirm(false)}
+                        className="w-full px-4 py-2 rounded-lg border border-[var(--border-color)] bg-[var(--bg-card)] hover:bg-[var(--bg-surface)] text-secondary font-semibold text-sm transition"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </motion.div>
     </div>
   );
