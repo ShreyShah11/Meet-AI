@@ -1,6 +1,6 @@
 import mongoose from 'mongoose';
 
-export const ROLES = ['owner', 'admin', 'manager', 'member', 'viewer'];
+export const ROLES = ['admin', 'member'];
 
 const userSchema = new mongoose.Schema({
   organizationId: {

@@ -31,7 +31,7 @@ export const createUser = async (req, res) => {
       return res.status(400).json({ message: 'Password must be at least 8 characters' });
     }
 
-    if (!ROLES.includes(role) || role === 'owner') {
+    if (!ROLES.includes(role)) {
       return res.status(400).json({ message: 'Invalid role' });
     }
 
@@ -67,11 +67,7 @@ export const updateUser = async (req, res) => {
       return res.status(404).json({ message: 'User not found' });
     }
 
-    if (targetUser.role === 'owner' && targetUser._id.toString() !== req.user._id.toString()) {
-      return res.status(400).json({ message: 'Owner accounts cannot be changed by another user' });
-    }
-
-    if (role && (!ROLES.includes(role) || (role === 'owner' && req.user.role !== 'owner'))) {
+    if (role && !ROLES.includes(role)) {
       return res.status(400).json({ message: 'Invalid role' });
     }
 
@@ -108,8 +104,8 @@ export const deleteUser = async (req, res) => {
       return res.status(400).json({ message: 'You cannot delete your own account' });
     }
 
-    if (targetUser.role === 'owner') {
-      return res.status(400).json({ message: 'Owner accounts cannot be deleted' });
+    if (targetUser.role === 'admin') {
+      return res.status(400).json({ message: 'Admin accounts cannot be deleted' });
     }
 
     await targetUser.deleteOne();

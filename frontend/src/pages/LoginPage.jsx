@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { login, isAuthenticated } from '../services/api';
+import { getUserRole, login, isAuthenticated } from '../services/api';
 
 const LoginPage = () => {
   const navigate = useNavigate();
@@ -11,7 +11,7 @@ const LoginPage = () => {
 
   useEffect(() => {
     if (isAuthenticated()) {
-      navigate('/', { replace: true });
+      navigate(getUserRole() === 'member' ? '/member' : '/', { replace: true });
     }
   }, [navigate]);
 
@@ -21,8 +21,8 @@ const LoginPage = () => {
     setLoading(true);
 
     try {
-      await login(email.trim(), password);
-      navigate('/', { replace: true });
+      const response = await login(email.trim(), password);
+      navigate(response.user?.role === 'member' ? '/member' : '/', { replace: true });
     } catch (err) {
       setError(err.message || 'Unable to log in. Please check your credentials.');
     } finally {

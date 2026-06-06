@@ -37,6 +37,16 @@ export const config = {
     apiKey: process.env.LLM_API_KEY || '',
     model: process.env.LLM_MODEL || '',
   },
+
+  vectors: {
+    pineconeApiKey: process.env.PINECONE_API_KEY || '',
+    pineconeCloud: process.env.PINECONE_CLOUD || 'aws',
+    pineconeRegion: process.env.PINECONE_REGION || 'us-east-1',
+    embeddingApiKey: process.env.OPENAI_API_KEY || '',
+    embeddingModel: process.env.EMBEDDING_MODEL || 'text-embedding-3-small',
+    embeddingDimension: parseInt(process.env.EMBEDDING_DIMENSION) || 1536,
+    topK: parseInt(process.env.VECTOR_TOP_K) || 5
+  },
 };
 
 export default config;

@@ -3,8 +3,62 @@
  * Handles meeting-related API requests
  */
 import { v4 as uuidv4 } from 'uuid';
-import { Meeting, Transcript, Summary } from '../models/index.js';
+import { Meeting, Transcript, Summary, TeamMember, User } from '../models/index.js';
 import { enqueueProcessingJob } from '../queue/index.js';
+import { llmService, vectorService } from '../services/index.js';
+
+const isAdmin = (user) => user?.role === 'admin';
+
+const getAccessibleMeetingQuery = (req, meetingId) => {
+  const base = { _id: meetingId, organizationId: req.organizationId };
+  if (isAdmin(req.user)) return base;
+  return {
+    ...base,
+    accessibleUsers: req.user._id
+  };
+};
+
+const formatMeetingForMember = (meeting) => ({
+  _id: meeting._id,
+  title: meeting.title,
+  originalFilename: meeting.originalFilename,
+  status: meeting.status,
+  createdAt: meeting.createdAt,
+  updatedAt: meeting.updatedAt,
+  vectorStatus: meeting.vectorStatus,
+  vectorChunkCount: meeting.vectorChunkCount
+});
+
+const resolveAccessibleUsers = async (organizationId, teamMemberIds = []) => {
+  if (!Array.isArray(teamMemberIds) || teamMemberIds.length === 0) {
+    return [];
+  }
+
+  const teamMembers = await TeamMember.find({
+    _id: { $in: teamMemberIds },
+    organizationId
+  });
+
+  const emails = teamMembers
+    .flatMap((member) => [member.googleEmail, member.atlassianEmail])
+    .filter(Boolean)
+    .map((email) => email.toLowerCase());
+
+  const names = teamMembers.map((member) => member.name);
+  const users = await User.find({
+    organizationId,
+    role: 'member',
+    $or: [
+      { email: { $in: emails } },
+      { googleEmail: { $in: emails } },
+      { atlassianEmail: { $in: emails } },
+      { jiraEmail: { $in: emails } },
+      { name: { $in: names } }
+    ]
+  }).select('_id');
+
+  return users.map((user) => user._id);
+};
 
 /**
  * POST /api/meetings/upload
@@ -200,6 +254,23 @@ export const uploadTranscript = async (req, res) => {
   }
 };
 
+export const getMemberMeetings = async (req, res) => {
+  try {
+    const meetings = await Meeting.find({
+      organizationId: req.organizationId,
+      accessibleUsers: req.user._id,
+      status: 'done'
+    })
+      .sort({ createdAt: -1 })
+      .select('title originalFilename status createdAt updatedAt vectorStatus vectorChunkCount');
+
+    res.json(meetings.map(formatMeetingForMember));
+  } catch (error) {
+    console.error('[Meetings] Member dashboard error:', error);
+    res.status(500).json({ message: 'Failed to fetch accessible meetings' });
+  }
+};
+
 /**
  * GET /api/meetings/:meetingId/transcript
  * Get transcript for a meeting
@@ -208,7 +279,7 @@ export const getTranscript = async (req, res) => {
   try {
     const { meetingId } = req.params;
 
-    const meeting = await Meeting.findOne({ _id: meetingId, organizationId: req.organizationId });
+    const meeting = await Meeting.findOne(getAccessibleMeetingQuery(req, meetingId));
     if (!meeting) {
       return res.status(404).json({ message: 'Meeting not found' });
     }
@@ -244,7 +315,7 @@ export const getSummary = async (req, res) => {
   try {
     const { meetingId } = req.params;
 
-    const meeting = await Meeting.findOne({ _id: meetingId, organizationId: req.organizationId });
+    const meeting = await Meeting.findOne(getAccessibleMeetingQuery(req, meetingId));
     if (!meeting) {
       return res.status(404).json({ message: 'Meeting not found' });
     }
@@ -274,7 +345,7 @@ export const getSummary = async (req, res) => {
 export const updateTasks = async (req, res) => {
   try {
     const { meetingId } = req.params;
-    const { tasks } = req.body;
+    const { tasks, accessibleTeamMemberIds = [] } = req.body;
 
     const meeting = await Meeting.findOne({ _id: meetingId, organizationId: req.organizationId });
     if (!meeting) {
@@ -285,6 +356,11 @@ export const updateTasks = async (req, res) => {
       { meetingId, organizationId: req.organizationId },
       { actionItems: tasks, updatedAt: Date.now() }
     );
+
+    const accessibleUsers = await resolveAccessibleUsers(req.organizationId, accessibleTeamMemberIds);
+    meeting.accessibleTeamMembers = accessibleTeamMemberIds;
+    meeting.accessibleUsers = accessibleUsers;
+    await meeting.save();
 
     console.log(`[Tasks] Updated ${tasks?.length || 0} tasks for meeting: ${meetingId}`);
 
@@ -300,6 +376,8 @@ export const updateTasks = async (req, res) => {
         body: JSON.stringify({
           meetingId,
           tasks,
+          accessibleTeamMemberIds,
+          accessibleUserIds: accessibleUsers.map((id) => id.toString()),
           confirmedAt: new Date().toISOString()
         }),
       });
@@ -407,6 +485,38 @@ export const confirmSingleTask = async (req, res) => {
   }
 };
 
+export const chatWithMeeting = async (req, res) => {
+  try {
+    const { meetingId } = req.params;
+    const { question } = req.body;
+
+    if (!question || !question.trim()) {
+      return res.status(400).json({ message: 'Question is required' });
+    }
+
+    const meeting = await Meeting.findOne(getAccessibleMeetingQuery(req, meetingId));
+    if (!meeting) {
+      return res.status(404).json({ message: 'Meeting not found' });
+    }
+
+    const matches = await vectorService.retrieve(meeting, question);
+    const answer = await llmService.answerFromRetrievedContext(question, matches);
+
+    res.json({
+      answer,
+      sources: matches.map((match) => ({
+        score: match.score,
+        text: match.text,
+        metadata: match.metadata
+      })),
+      vectorStatus: meeting.vectorStatus
+    });
+  } catch (error) {
+    console.error('[Meetings] Chat error:', error);
+    res.status(500).json({ message: 'Failed to chat with meeting' });
+  }
+};
+
 /**
  * Format seconds to HH:MM:SS
  */
@@ -420,8 +530,10 @@ const formatTime = (seconds) => {
 export default {
   uploadMeeting,
   uploadTranscript,
+  getMemberMeetings,
   getTranscript,
   getSummary,
   updateTasks,
-  confirmSingleTask
+  confirmSingleTask,
+  chatWithMeeting
 };

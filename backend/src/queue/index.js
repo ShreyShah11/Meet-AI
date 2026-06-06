@@ -3,7 +3,7 @@
  * In-memory job processing with detailed step tracking
  */
 import { Meeting, Transcript, Summary } from '../models/index.js';
-import { transcriptionService, chunkingService, llmService } from '../services/index.js';
+import { transcriptionService, chunkingService, llmService, vectorService } from '../services/index.js';
 
 // In-memory job store
 const jobs = new Map();
@@ -111,6 +111,11 @@ const processJob = async (jobId, meetingId, audioPath, type = 'audio') => {
     // Step 4: Chunking for LLM
     updateJobStep(jobId, STEPS.CHUNKING);
     await updateMeetingStatus(meetingId, 'chunking');
+    const transcriptForVectors = await Transcript.findOne({ meetingId });
+    if (transcriptForVectors) {
+      await vectorService.indexTranscript({ meeting, transcript: transcriptForVectors });
+      console.log(`[Processor] Indexed transcript chunks for meeting: ${meetingId}`);
+    }
     const chunks = chunkingService.chunkTranscript(segments);
     console.log(`[Processor] 📦 Created ${chunks.length} chunks`);
 

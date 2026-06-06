@@ -42,6 +42,13 @@ export const clearAuth = () => {
 };
 
 export const isAuthenticated = () => !!getToken();
+export const getUserRole = () => {
+  const role = getUser()?.role || null;
+  if (['owner', 'manager'].includes(role)) return 'admin';
+  if (role === 'viewer') return 'member';
+  return role;
+};
+export const isAdmin = () => getUserRole() === 'admin';
 
 // Simulated network delay for mocks
 const MOCK_DELAY = 800;
@@ -271,7 +278,7 @@ export const reExtractMeeting = async (meetingId) => {
  * @param {Array} tasks - The edited tasks array
  * @returns {Promise<{success: boolean}>}
  */
-export const confirmTasks = async (meetingId, tasks) => {
+export const confirmTasks = async (meetingId, tasks, accessibleTeamMemberIds = []) => {
   if (USE_MOCKS) {
     await delay(MOCK_DELAY);
     console.log('Tasks confirmed:', tasks);
@@ -281,7 +288,7 @@ export const confirmTasks = async (meetingId, tasks) => {
   // Real API call
   return apiRequest(`/meetings/${meetingId}/tasks`, {
     method: 'POST',
-    body: JSON.stringify({ tasks }),
+    body: JSON.stringify({ tasks, accessibleTeamMemberIds }),
   });
 };
 
@@ -315,6 +322,17 @@ export const confirmSingleTask = async (meetingId, taskId, task) => {
  */
 export const getTeamMembers = async () => {
   return apiRequest('/team-members');
+};
+
+export const getMemberMeetings = async () => {
+  return apiRequest('/meetings/member-dashboard/list');
+};
+
+export const chatWithMeeting = async (meetingId, question) => {
+  return apiRequest(`/meetings/${meetingId}/chat`, {
+    method: 'POST',
+    body: JSON.stringify({ question }),
+  });
 };
 
 /**
@@ -447,6 +465,8 @@ export const api = {
   confirmTasks,
   confirmSingleTask,
   getTeamMembers,
+  getMemberMeetings,
+  chatWithMeeting,
   createTeamMember,
   updateTeamMember,
   deleteTeamMember,

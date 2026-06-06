@@ -41,6 +41,31 @@ const meetingSchema = new mongoose.Schema({
   fileSize: Number,
   duration: Number,
 
+  accessibleTeamMembers: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'TeamMember',
+    index: true
+  }],
+
+  accessibleUsers: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    index: true
+  }],
+
+  vectorIndexName: String,
+  vectorNamespace: String,
+  vectorStatus: {
+    type: String,
+    enum: ['pending', 'indexed', 'unavailable', 'error'],
+    default: 'pending'
+  },
+  vectorChunkCount: {
+    type: Number,
+    default: 0
+  },
+  vectorError: String,
+
   // Job reference
   jobId: {
     type: String,

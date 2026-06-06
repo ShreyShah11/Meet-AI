@@ -4,6 +4,7 @@
  */
 export { Meeting } from './Meeting.js';
 export { Transcript } from './Transcript.js';
+export { TranscriptVectorChunk } from './TranscriptVectorChunk.js';
 export { Summary } from './Summary.js';
 export { TeamMember } from './TeamMember.js';
 export { Organization } from './Organization.js';

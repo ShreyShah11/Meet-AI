@@ -7,12 +7,14 @@ import { upload } from '../utils/upload.js';
 import {
   uploadMeeting,
   uploadTranscript,
+  getMemberMeetings,
   getTranscript,
   getSummary,
   updateTasks,
-  confirmSingleTask
+  confirmSingleTask,
+  chatWithMeeting
 } from '../controllers/meetingsController.js';
-import { canConfirmTasks, canManageMeetings } from '../middleware/auth.js';
+import { canConfirmTasks, canManageMeetings, requireAdmin } from '../middleware/auth.js';
 
 const router = Router();
 
@@ -26,7 +28,13 @@ router.post('/upload-transcript', canManageMeetings, upload.single('transcript')
 router.get('/:meetingId/transcript', getTranscript);
 
 // GET /api/meetings/:meetingId/summary - Get summary
-router.get('/:meetingId/summary', getSummary);
+router.get('/:meetingId/summary', requireAdmin, getSummary);
+
+// GET /api/meetings/member-dashboard - Get meetings shared with current team member
+router.get('/member-dashboard/list', getMemberMeetings);
+
+// POST /api/meetings/:meetingId/chat - Ask questions over the meeting transcript
+router.post('/:meetingId/chat', chatWithMeeting);
 
 // POST /api/meetings/:meetingId/tasks - Update all tasks
 router.post('/:meetingId/tasks', canConfirmTasks, updateTasks);

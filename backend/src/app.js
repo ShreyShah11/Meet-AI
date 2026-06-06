@@ -9,7 +9,7 @@ import { fileURLToPath } from 'url';
 import { config } from './config/env.js';
 import { meetingsRoutes, jobsRoutes, teamMembersRoutes, authRoutes, usersRoutes } from './routes/index.js';
 import { createProxyMiddleware } from 'http-proxy-middleware';
-import { requireAuth } from './middleware/auth.js';
+import { requireAdmin, requireAuth } from './middleware/auth.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -30,7 +30,7 @@ app.use(cors({
 
 // Proxy to Python Bot Service
 // Must be before body parsers to ensure stream is not consumed
-app.use('/api/bot', requireAuth, createProxyMiddleware({
+app.use('/api/bot', requireAuth, requireAdmin, createProxyMiddleware({
   target: 'http://127.0.0.1:5001',
   changeOrigin: true,
   pathRewrite: {
@@ -68,7 +68,7 @@ if (config.isDev) {
 
 app.use('/api/auth', authRoutes);
 app.use('/api/meetings', requireAuth, meetingsRoutes);
-app.use('/api/jobs', requireAuth, jobsRoutes);
+app.use('/api/jobs', requireAuth, requireAdmin, jobsRoutes);
 app.use('/api/team-members', requireAuth, teamMembersRoutes);
 app.use('/api/users', requireAuth, usersRoutes);
 

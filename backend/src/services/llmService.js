@@ -375,6 +375,34 @@ class LLMService {
     return { summary, tasks: mergedTasks };
   }
 
+  async answerFromRetrievedContext(question, retrievedChunks = []) {
+    const context = retrievedChunks
+      .filter((chunk) => chunk.text)
+      .map((chunk, index) => {
+        const source = chunk.metadata?.startTime
+          ? `Source ${index + 1} (${chunk.metadata.startTime} - ${chunk.metadata.endTime || 'unknown'})`
+          : `Source ${index + 1}`;
+        return `${source}\n${chunk.text}`;
+      })
+      .join('\n\n');
+
+    if (!context) {
+      return 'I could not find enough transcript context for that question.';
+    }
+
+    if (this.provider === 'dummy' || !this.model) {
+      return `Based on the retrieved transcript context:\n\n${context.slice(0, 1200)}`;
+    }
+
+    const messages = [
+      new SystemMessage('Answer questions using only the provided meeting transcript context. If the context does not contain the answer, say that clearly. Keep the answer concise and cite timestamps when available.'),
+      new HumanMessage(`Question: ${question}\n\nTranscript context:\n${context}`)
+    ];
+
+    const response = await this.model.invoke(messages);
+    return response.content;
+  }
+
   /**
    * Execute Groq extraction
    */

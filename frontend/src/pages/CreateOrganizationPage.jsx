@@ -43,7 +43,7 @@ const CreateOrganizationPage = () => {
   };
 
   const handleProceedToUserSetup = () => {
-    navigate(`/create-user/${organizationId}?role=owner`, { replace: true });
+    navigate(`/create-user/${organizationId}?role=admin`, { replace: true });
   };
 
   const handleDeleteOrganization = async () => {

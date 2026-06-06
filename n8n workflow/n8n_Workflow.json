@@ -1,0 +1,461 @@
+{
+  "name": "Confirm Tasks → Jira + Calendar",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "confirm-tasks",
+        "responseMode": "=onReceived",
+        "responseCode": "={{ 200 }}",
+        "options": {
+          "allowedOrigins": "localhost:5173"
+        }
+      },
+      "name": "Confirm Tasks Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        -880,
+        128
+      ],
+      "id": "f66d5d63-780c-4fda-82ac-3b45ee20a1ef",
+      "webhookId": "eeec4792-c1a8-49d4-a321-463243e9927f"
+    },
+    {
+      "parameters": {
+        "functionCode": "const input = items[0].json;\nconst body = input.body;\nconst tasks = body.tasks || [];\n\nconst output = [];\nfor (const task of tasks) {\n  output.push({\n    json: {\n      title: task.title,\n      description: task.description,\n      priority: task.priority,\n      assignee: task.assignee?.name || task.assignee || task.owner || 'Unassigned',\n      assigner: task.assigner?.name || 'Unknown',\n      \n      // FIX: Access fields directly, not via assigneeMapping\n      atlassianEmail: task.atlassianEmail || null,\n      googleEmail: task.googleEmail || null,\n      slackUserId: task.slackUserId || null,\n      slackMention: task.slackMention || null,\n      \n      dueDate: task.due_date || task.dueDate || null,\n      suggestedAction: task.suggested_schedule_action || 'manual',\n      confidence: task.confidence,\n      meetingId: body.meetingId,\n      confirmedAt: body.confirmedAt\n    }\n  });\n}\n\nreturn output;"
+      },
+      "name": "Split Tasks",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        -656,
+        128
+      ],
+      "id": "958de48d-85d4-4c13-91ac-83451fd638e5"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json[\"status\"]}}",
+              "operation": "notEqual",
+              "value2": "cancelled"
+            }
+          ]
+        }
+      },
+      "name": "Skip Cancelled",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        -448,
+        128
+      ],
+      "id": "61eceffd-8191-4510-b0c7-45196491e5bd"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json[\"suggestedAction\"]}}",
+              "value2": "jira"
+            }
+          ]
+        }
+      },
+      "name": "Is Jira Task?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        -224,
+        48
+      ],
+      "id": "d04a7daf-7417-4134-b9a3-e4ffcea7050a"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json[\"suggestedAction\"]}}",
+              "value2": "calendar"
+            }
+          ]
+        }
+      },
+      "name": "Is Calendar Task?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        -208,
+        256
+      ],
+      "id": "d7468caf-814e-434e-b797-2987bf9bce5b"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "10616abd-1726-40fd-a0de-20163ffc8243",
+              "leftValue": "={{$json[\"suggestedAction\"]}}",
+              "rightValue": "slack",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            },
+            {
+              "id": "f1b02f88-16a8-48b7-a1a4-c16ca89a8e18",
+              "leftValue": "",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -208,
+        416
+      ],
+      "id": "5cdd5da8-1045-4a44-9825-e243283c2a81",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://www.googleapis.com/calendar/v3/calendars/primary/events",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleCalendarOAuth2Api",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ $json.calendarBody }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        256,
+        240
+      ],
+      "id": "5eeae93b-5418-4c43-9470-e3d9c949af94",
+      "name": "HTTP Request1",
+      "credentials": {
+        "googleCalendarOAuth2Api": {
+          "id": "ozmNNSKH48BvEM86",
+          "name": "Google Calendar account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const today = new Date();\nconst tomorrow = new Date(today.getTime() + 86400000);\nconst dateStr = $input.item.json.dueDate || tomorrow.toISOString().slice(0,10);\n\nreturn {\n  json: {\n    ...($input.item.json),\n    calendarBody: JSON.stringify({\n      summary: $input.item.json.title || 'Meeting',\n      description: $input.item.json.description || '',\n      start: {\n        dateTime: dateStr + 'T09:00:00',\n        timeZone: 'Asia/Kolkata'\n      },\n      end: {\n        dateTime: dateStr + 'T09:30:00',\n        timeZone: 'Asia/Kolkata'\n      },\n      attendees: $input.item.json.googleEmail ? [{email: $input.item.json.googleEmail}] : []\n    })\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        32,
+        240
+      ],
+      "id": "54ef1ea5-d4f2-4736-b915-8ccfecc35068",
+      "name": "Prepare Calendar Body"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://slack.com/api/chat.postMessage",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "slackApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"channel\": \"#all-meetflowslack\",\n  \"text\": \"New Task: {{ $json.title }}\\nDescription: {{ $json.description }}\\nAssigned to: {{ $json.assignee }}\\nPriority: {{ $json.priority }}\\nDue Date: {{ $json.dueDate }}\"\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        80,
+        416
+      ],
+      "id": "35c0142e-10e9-4ae0-93d8-9e7ed87eabaf",
+      "name": "HTTP Request2",
+      "credentials": {
+        "slackApi": {
+          "id": "bgEqVAgnjqMvaC3D",
+          "name": "Slack account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "=https://aryanvadhadiya2004.atlassian.net/rest/api/3/user/search?query={{ $json.atlassianEmail }}&maxResults=1",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "jiraSoftwareCloudApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        64,
+        48
+      ],
+      "id": "03107cea-a844-4a5a-b5bd-d158e99380d9",
+      "name": "Lookup Jira User",
+      "credentials": {
+        "jiraSoftwareCloudApi": {
+          "id": "bFSgFvZC1sL56AMH",
+          "name": "Jira SW Cloud account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\nconst originalItems = $('Is Jira Task?').all();\nconst results = [];\n\nfor (let i = 0; i < items.length; i++) {\n  const lookupResult = items[i].json;\n  const originalData = originalItems[i]?.json || {};\n  \n  let accountId = null;\n  if (lookupResult?.accountId) {\n    accountId = lookupResult.accountId;\n  } else if (Array.isArray(lookupResult) && lookupResult[0]?.accountId) {\n    accountId = lookupResult[0].accountId;\n  }\n  \n  results.push({\n    json: {\n      ...originalData,\n      jiraAccountId: accountId\n    }\n  });\n}\n\nreturn results;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        320,
+        48
+      ],
+      "id": "50308180-6878-4a2a-84eb-677890105921",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://aryanvadhadiya2004.atlassian.net/rest/api/3/issue",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "jiraSoftwareCloudApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"fields\": {\n    \"project\": { \"key\": \"KAN\" },\n    \"summary\": \"{{ $json.title }}\",\n    \"description\": {\n      \"type\": \"doc\",\n      \"version\": 1,\n      \"content\": [{\"type\": \"paragraph\", \"content\": [{\"type\": \"text\", \"text\": \"{{ $json.description }}\"}]}]\n    },\n    \"issuetype\": { \"name\": \"Task\" },\n    \"assignee\": {\n      \"accountId\": \"{{ $json.jiraAccountId }}\"\n    }\n  }\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        528,
+        48
+      ],
+      "id": "b8d58f4e-e52c-482d-b2f3-ca5b65c1887b",
+      "name": "HTTP Request",
+      "credentials": {
+        "jiraSoftwareCloudApi": {
+          "id": "bFSgFvZC1sL56AMH",
+          "name": "Jira SW Cloud account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Loop over input items and add a new field called 'myNewField' to the JSON of each one\nfor (const item of $input.all()) {\n  item.json.myNewField = 1;\n}\n\nreturn $input.all();"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -224,
+        624
+      ],
+      "id": "a68adc09-e013-4ae2-9978-52314954e69e",
+      "name": "Code in JavaScript1"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Confirm Tasks Webhook": {
+      "main": [
+        [
+          {
+            "node": "Split Tasks",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Tasks": {
+      "main": [
+        [
+          {
+            "node": "Skip Cancelled",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Skip Cancelled": {
+      "main": [
+        [
+          {
+            "node": "Is Jira Task?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Jira Task?": {
+      "main": [
+        [
+          {
+            "node": "Is Calendar Task?",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Lookup Jira User",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Is Calendar Task?",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Calendar Task?": {
+      "main": [
+        [
+          {
+            "node": "Prepare Calendar Body",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request1": {
+      "main": [
+        []
+      ]
+    },
+    "Prepare Calendar Body": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lookup Jira User": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request2": {
+      "main": [
+        []
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "23f5f1ec-c8a4-433d-9a3d-9404d68c7798",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "4bf777dff6ee9fdd671874bd1fc0b6f2a8c607b2b4645a4a69c66325821bcd47"
+  },
+  "id": "zHVJb4NxFp7ipGR-Dw8J-",
+  "tags": []
+}

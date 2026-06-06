@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { createOrganization, createOwnerUser, createUser, signup, login, getMe, deleteOrganization } from '../controllers/authController.js';
-import { requireAuth } from '../middleware/auth.js';
+import { requireAdmin, requireAuth } from '../middleware/auth.js';
 
 const router = Router();
 
@@ -10,7 +10,7 @@ router.post('/create-owner-user', createOwnerUser);
 router.post('/create-user', createUser);
 
 // Delete organization
-router.delete('/organization/:organizationId', deleteOrganization);
+router.delete('/organization/:organizationId', requireAuth, requireAdmin, deleteOrganization);
 
 // Legacy endpoint
 router.post('/signup', signup);

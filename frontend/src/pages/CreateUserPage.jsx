@@ -3,14 +3,15 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { createOwnerUser, createUser } from '../services/api';
 
 /**
- * CreateUserPage - Create user account (owner or regular user)
- * Second step for organization owner, or later for regular team members
+ * CreateUserPage - Create an admin or team member account
+ * Second step for organization admins, or later for regular team members
  */
 const CreateUserPage = () => {
   const navigate = useNavigate();
   const { organizationId } = useParams();
   const [searchParams] = useSearchParams();
-  const role = searchParams.get('role') || 'member';
+  const requestedRole = searchParams.get('role') || 'member';
+  const role = requestedRole === 'owner' ? 'admin' : requestedRole;
   
   const [formData, setFormData] = useState({
     name: '',
@@ -26,7 +27,7 @@ const CreateUserPage = () => {
 
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [showIntegrations, setShowIntegrations] = useState(role !== 'owner'); // Show integrations for regular users, not for owner
+  const [showIntegrations, setShowIntegrations] = useState(role !== 'admin');
 
   const handleChange = (event) => {
     const { name, value } = event.target;
@@ -60,14 +61,14 @@ const CreateUserPage = () => {
         atlassianEmail: formData.atlassianEmail || null,
       };
 
-      if (role === 'owner') {
+      if (role === 'admin') {
         await createOwnerUser(organizationId, formData.name, formData.email, formData.password);
       } else {
         await createUser(organizationId, formData.name, formData.email, formData.password, integrations);
       }
 
       // Navigate to dashboard after successful creation
-      navigate('/', { replace: true });
+      navigate(role === 'member' ? '/member' : '/', { replace: true });
     } catch (err) {
       setError(err.message || `Failed to create ${role} user`);
     } finally {
@@ -83,10 +84,10 @@ const CreateUserPage = () => {
             <span className="text-2xl font-bold">M</span>
           </div>
           <h1 className="text-2xl font-semibold text-slate-900 dark:text-white">
-            {role === 'owner' ? 'Create Admin Account' : 'Create Team Member Account'}
+            {role === 'admin' ? 'Create Admin Account' : 'Create Team Member Account'}
           </h1>
           <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
-            {role === 'owner' 
+            {role === 'admin'
               ? 'Set up your organization administrator account'
               : 'Create your team member account with integration details'}
           </p>
@@ -232,13 +233,13 @@ const CreateUserPage = () => {
             disabled={loading}
             className="w-full rounded-2xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-blue-400 mt-6"
           >
-            {loading ? 'Creating Account…' : `Create ${role === 'owner' ? 'Admin' : 'Team Member'} Account`}
+            {loading ? 'Creating Account...' : `Create ${role === 'admin' ? 'Admin' : 'Team Member'} Account`}
           </button>
         </form>
 
         <div className="mt-6 text-center text-sm text-slate-500 dark:text-slate-400">
           <p>
-            {role === 'owner'
+            {role === 'admin'
               ? 'After creating your account, you can invite team members.'
               : 'Fill in your integration details so we can connect with your tools.'}
           </p>

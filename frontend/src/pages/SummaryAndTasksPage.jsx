@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { getSummary, confirmTasks, confirmSingleTask } from '../services/api';
+import { getSummary, confirmTasks, confirmSingleTask, getTeamMembers } from '../services/api';
 
 /**
  * SummaryAndTasksPage - Displays AI-generated summary and action items
@@ -14,6 +14,8 @@ const SummaryAndTasksPage = () => {
   // State for API data
   const [summary, setSummary] = useState(null);
   const [tasks, setTasks] = useState([]);
+  const [teamMembers, setTeamMembers] = useState([]);
+  const [selectedMemberIds, setSelectedMemberIds] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -27,6 +29,8 @@ const SummaryAndTasksPage = () => {
         // Raw LLM format: { summary, tasks }
         setSummary({ executive: data.summary, decisions: [] });
         setTasks(data.tasks || []);
+        const members = await getTeamMembers();
+        setTeamMembers(members);
       } catch (err) {
         setError(err.message || 'Failed to load summary');
       } finally {
@@ -97,13 +101,21 @@ const SummaryAndTasksPage = () => {
   const handleConfirmTasks = async () => {
     setIsConfirming(true);
     try {
-      await confirmTasks(meetingId, tasks);
+      await confirmTasks(meetingId, tasks, selectedMemberIds);
       alert('All tasks confirmed successfully!');
     } catch (err) {
       alert('Failed to confirm tasks: ' + err.message);
     } finally {
       setIsConfirming(false);
     }
+  };
+
+  const toggleMemberAccess = (memberId) => {
+    setSelectedMemberIds((current) => (
+      current.includes(memberId)
+        ? current.filter((id) => id !== memberId)
+        : [...current, memberId]
+    ));
   };
 
   // Handle confirm single task
@@ -458,6 +470,50 @@ const SummaryAndTasksPage = () => {
                     );
                   })}
                 </AnimatePresence>
+              </div>
+
+              <div className="mt-6 rounded-xl border border-[var(--border-color)] bg-[var(--bg-surface)] p-4">
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <div>
+                    <h3 className="font-medium text-primary">Share meeting with team members</h3>
+                    <p className="mt-1 text-sm text-secondary">
+                      Selected members can see this meeting in their dashboard and chat with its transcript.
+                    </p>
+                  </div>
+                  <span className="rounded-full bg-accent/10 px-3 py-1 text-xs font-medium text-accent">
+                    {selectedMemberIds.length} selected
+                  </span>
+                </div>
+
+                {teamMembers.length === 0 ? (
+                  <p className="text-sm text-secondary">No team members available yet.</p>
+                ) : (
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    {teamMembers.map((member) => (
+                      <label
+                        key={member._id}
+                        className={`flex cursor-pointer items-center gap-3 rounded-xl border p-3 transition ${
+                          selectedMemberIds.includes(member._id)
+                            ? 'border-accent bg-accent/10'
+                            : 'border-[var(--border-color)] hover:border-accent/40'
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selectedMemberIds.includes(member._id)}
+                          onChange={() => toggleMemberAccess(member._id)}
+                          className="h-4 w-4 accent-[var(--accent)]"
+                        />
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-medium text-primary">{member.name}</p>
+                          <p className="truncate text-xs text-secondary">
+                            {member.googleEmail || member.atlassianEmail || member.slackDisplayName || 'No integration email'}
+                          </p>
+                        </div>
+                      </label>
+                    ))}
+                  </div>
+                )}
               </div>
 
               {/* Confirm button */}

@@ -1,6 +1,11 @@
 import { Organization, TeamMember, User } from '../models/index.js';
 import { hashPassword, signToken, verifyPassword } from '../utils/auth.js';
 
+const normalizeRole = (role) => {
+  if (role === 'admin' || role === 'owner' || role === 'manager') return 'admin';
+  return 'member';
+};
+
 const buildSession = (user) => ({
   token: signToken({
     userId: user._id.toString(),
@@ -89,7 +94,7 @@ export const createOwnerUser = async (req, res) => {
       name: name.trim(),
       email: email.toLowerCase().trim(),
       passwordHash: hashPassword(password),
-      role: 'owner'
+      role: 'admin'
     });
     await syncTeamMemberForUser(user);
 
@@ -181,7 +186,7 @@ export const signup = async (req, res) => {
       name,
       email,
       passwordHash: hashPassword(password),
-      role: 'owner'
+      role: 'admin'
     });
     await syncTeamMemberForUser(user);
 
@@ -210,6 +215,12 @@ export const login = async (req, res) => {
     const user = await User.findOne({ email: email.toLowerCase().trim() });
     if (!user || user.status !== 'active' || !verifyPassword(password, user.passwordHash)) {
       return res.status(401).json({ message: 'Invalid email or password' });
+    }
+
+    const normalizedRole = normalizeRole(user.role);
+    if (user.role !== normalizedRole) {
+      user.role = normalizedRole;
+      await user.save();
     }
 
     res.json(buildSession(user));

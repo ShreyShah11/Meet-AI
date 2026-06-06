@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Outlet, Link, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { isAuthenticated, clearAuth } from '../services/api';
+import { clearAuth, getUserRole, isAdmin, isAuthenticated } from '../services/api';
 
 /**
  * MainLayout - Primary layout wrapper for all pages
@@ -9,6 +9,7 @@ import { isAuthenticated, clearAuth } from '../services/api';
  */
 const MainLayout = () => {
   const navigate = useNavigate();
+  const userRole = getUserRole();
 
   // Theme state - check localStorage and system preference
   const [isDark, setIsDark] = useState(() => {
@@ -73,13 +74,13 @@ const MainLayout = () => {
             <div className="flex items-center gap-2">
               {/* Team Members Link */}
               <Link
-                to="/team-members"
+                to={isAdmin() ? '/team-members' : '/member'}
                 className="flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-white/10 transition-colors"
               >
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
                 </svg>
-                <span className="hidden sm:inline">Team</span>
+                <span className="hidden sm:inline">{userRole === 'member' ? 'My Meetings' : 'Team'}</span>
               </Link>
 
               {/* Theme Toggle */}

@@ -15,10 +15,10 @@ import { canManageTeam } from '../middleware/auth.js';
 const router = Router();
 
 // GET /api/team-members - Get all team members
-router.get('/', getAllTeamMembers);
+router.get('/', canManageTeam, getAllTeamMembers);
 
 // GET /api/team-members/:id - Get single team member
-router.get('/:id', getTeamMember);
+router.get('/:id', canManageTeam, getTeamMember);
 
 // POST /api/team-members - Create team member
 router.post('/', canManageTeam, createTeamMember);
