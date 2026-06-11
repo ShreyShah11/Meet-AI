@@ -26,11 +26,11 @@ const SummaryAndTasksPage = () => {
       try {
         setIsLoading(true);
         const data = await getSummary(meetingId);
+        const members = await getTeamMembers();
         // Raw LLM format: { summary, tasks }
         setSummary({ executive: data.summary, decisions: [] });
-        setTasks(data.tasks || []);
-        const members = await getTeamMembers();
         setTeamMembers(members);
+        setTasks(data.tasks || []);
       } catch (err) {
         setError(err.message || 'Failed to load summary');
       } finally {
@@ -44,6 +44,52 @@ const SummaryAndTasksPage = () => {
   const [editingTask, setEditingTask] = useState(null);
   const [isConfirming, setIsConfirming] = useState(false);
   const [confirmingTaskId, setConfirmingTaskId] = useState(null);
+
+  const enrichTaskWithMember = (task, member) => {
+    if (!member) {
+      const {
+        assignedTeamMemberId,
+        atlassianEmail,
+        googleEmail,
+        slackUserId,
+        slackDisplayName,
+        slackMention,
+        assigneeMapping,
+        ...rest
+      } = task;
+
+      return {
+        ...rest,
+        assignee: {
+          ...(task.assignee || {}),
+          name: 'Unassigned'
+        },
+        owner: 'Unassigned'
+      };
+    }
+
+    return {
+      ...task,
+      assignedTeamMemberId: member._id,
+      assignee: {
+        ...(task.assignee || {}),
+        name: member.name
+      },
+      owner: member.name,
+      atlassianEmail: member.atlassianEmail || null,
+      googleEmail: member.googleEmail || null,
+      slackUserId: member.slackUserId || null,
+      slackDisplayName: member.slackDisplayName || null,
+      slackMention: member.slackUserId ? `<@${member.slackUserId}>` : null,
+      assigneeMapping: {
+        name: member.name,
+        atlassianEmail: member.atlassianEmail || null,
+        googleEmail: member.googleEmail || null,
+        slackUserId: member.slackUserId || null,
+        slackMention: member.slackUserId ? `<@${member.slackUserId}>` : null
+      }
+    };
+  };
 
   // Priority configuration (supports both lowercase and capitalized)
   const priorityConfig = {
@@ -89,6 +135,13 @@ const SummaryAndTasksPage = () => {
     setTasks(prev => prev.map(task =>
       task._id === taskId ? { ...task, [field]: value } : task
     ));
+  };
+
+  const updateTaskAssignee = (taskId, memberId) => {
+    const member = teamMembers.find((teamMember) => teamMember._id === memberId);
+    setTasks((prev) => prev.map((task) => (
+      task._id === taskId ? enrichTaskWithMember(task, member) : task
+    )));
   };
 
   // Format date for display
@@ -377,19 +430,25 @@ const SummaryAndTasksPage = () => {
 
                         {/* Task metadata */}
                         <div className="flex flex-wrap items-center gap-4 text-sm">
-                          {/* Owner - editable */}
+                          {/* Assignee - matched to team members */}
                           <div className="flex items-center gap-2">
                             <svg className="w-4 h-4 text-secondary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                             </svg>
-                            <input
-                              type="text"
-                              value={getOwnerName(task)}
-                              onChange={(e) => updateTask(task._id, 'assignee', { name: e.target.value })}
-                              className="bg-transparent border-b border-transparent hover:border-[var(--border-color)] focus:border-accent outline-none text-primary transition-colors px-1 py-0.5 -mx-1 w-28"
+                            <select
+                              value={task.assignedTeamMemberId || ''}
+                              onChange={(e) => updateTaskAssignee(task._id, e.target.value)}
+                              className="max-w-44 cursor-pointer rounded-lg border border-[var(--border-color)] bg-[var(--bg-surface)] px-2 py-1 text-primary outline-none transition-colors focus:border-accent"
                               onFocus={() => setEditingTask(task._id)}
                               onBlur={() => setEditingTask(null)}
-                            />
+                            >
+                              <option value="">Unassigned</option>
+                              {teamMembers.map((member) => (
+                                <option key={member._id} value={member._id}>
+                                  {member.name}
+                                </option>
+                              ))}
+                            </select>
                           </div>
 
                           {/* Due date - editable */}

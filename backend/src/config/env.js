@@ -2,7 +2,14 @@
  * Environment Configuration
  * Centralizes all environment variable access
  */
-import 'dotenv/config';
+import dotenv from 'dotenv';
+import { fileURLToPath } from 'url';
+import { dirname, resolve } from 'path';
+
+// Load .env from the project root (one level above /backend)
+const __dirname = dirname(fileURLToPath(import.meta.url));
+dotenv.config({ path: resolve(__dirname, '../../../.env') });
+
 
 export const config = {
   // Server
@@ -42,9 +49,10 @@ export const config = {
     pineconeApiKey: process.env.PINECONE_API_KEY || '',
     pineconeCloud: process.env.PINECONE_CLOUD || 'aws',
     pineconeRegion: process.env.PINECONE_REGION || 'us-east-1',
-    embeddingApiKey: process.env.OPENAI_API_KEY || '',
-    embeddingModel: process.env.EMBEDDING_MODEL || 'text-embedding-3-small',
-    embeddingDimension: parseInt(process.env.EMBEDDING_DIMENSION) || 1536,
+    geminiApiKey: process.env.GEMINI_API_KEY || '',
+    embeddingModel: process.env.GEMINI_EMBEDDING_MODEL || 'text-embedding-004',
+    answerModel: process.env.GEMINI_MODEL || 'gemini-2.5-flash',
+    embeddingDimension: parseInt(process.env.GEMINI_EMBEDDING_DIMENSION) || 768,
     topK: parseInt(process.env.VECTOR_TOP_K) || 5
   },
 };

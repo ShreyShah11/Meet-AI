@@ -3,7 +3,7 @@
  * In-memory job processing with detailed step tracking
  */
 import { Meeting, Transcript, Summary } from '../models/index.js';
-import { transcriptionService, chunkingService, llmService, vectorService } from '../services/index.js';
+import { transcriptionService, chunkingService, llmService } from '../services/index.js';
 
 // In-memory job store
 const jobs = new Map();
@@ -63,59 +63,54 @@ const processJob = async (jobId, meetingId, audioPath, type = 'audio') => {
 
     // Step 1 & 2 & 3: Audio Processing (Skip if transcript-only)
     if (type !== 'transcript-only') {
-        // Step 1: Connecting to Gradio
-        updateJobStep(jobId, STEPS.CONNECTING);
-        await updateMeetingStatus(meetingId, 'transcribing');
+      // Step 1: Connecting to Gradio
+      updateJobStep(jobId, STEPS.CONNECTING);
+      await updateMeetingStatus(meetingId, 'transcribing');
 
-        // Step 2: Transcribing with Gradio diarization
-        updateJobStep(jobId, STEPS.TRANSCRIBING);
-        console.log('[Processor] 🎤 Sending to Gradio for diarization...');
+      // Step 2: Transcribing with Gradio diarization
+      updateJobStep(jobId, STEPS.TRANSCRIBING);
+      console.log('[Processor] 🎤 Sending to Gradio for diarization...');
 
-        segments = await transcriptionService.transcribe(
-            audioPath,
-            {}, // options
-            (step, label) => {
-                // onProgress update
-                console.log(`[Processor] 📢 Progress: ${step} - ${label}`);
+      segments = await transcriptionService.transcribe(
+        audioPath,
+        {}, // options
+        (step, label) => {
+          // onProgress update
+          console.log(`[Processor] 📢 Progress: ${step} - ${label}`);
 
-                // Map the service step to our job steps structure
-                const stepInfo = STEPS[step.toUpperCase()] || STEPS.TRANSCRIBING;
-                const stepWithLabel = { ...stepInfo, label };
+          // Map the service step to our job steps structure
+          const stepInfo = STEPS[step.toUpperCase()] || STEPS.TRANSCRIBING;
+          const stepWithLabel = { ...stepInfo, label };
 
-                updateJobStep(jobId, stepWithLabel);
-            }
-        );
-
-        if (!segments || segments.length === 0) {
-          throw new Error('No transcript segments received from diarization');
+          updateJobStep(jobId, stepWithLabel);
         }
+      );
 
-        // Step 3: Save transcript to MongoDB
-        updateJobStep(jobId, STEPS.SAVING_TRANSCRIPT);
-        const speakers = [...new Set(segments.map(s => s.speaker))];
-        const duration = segments.length > 0 ? segments[segments.length - 1].end : 0;
+      if (!segments || segments.length === 0) {
+        throw new Error('No transcript segments received from diarization');
+      }
 
-        await Transcript.findOneAndUpdate(
-          { meetingId },
-          { organizationId, meetingId, segments, speakers, duration },
-          { upsert: true, new: true }
-        );
-        console.log(`[Processor] 💾 Saved ${segments.length} segments, ${speakers.length} speakers`);
+      // Step 3: Save transcript to MongoDB
+      updateJobStep(jobId, STEPS.SAVING_TRANSCRIPT);
+      const speakers = [...new Set(segments.map(s => s.speaker))];
+      const duration = segments.length > 0 ? segments[segments.length - 1].end : 0;
+
+      await Transcript.findOneAndUpdate(
+        { meetingId },
+        { organizationId, meetingId, segments, speakers, duration },
+        { upsert: true, new: true }
+      );
+      console.log(`[Processor] 💾 Saved ${segments.length} segments, ${speakers.length} speakers`);
     } else {
-        // Retrieval for transcript-only jobs
-        const transcript = await Transcript.findOne({ meetingId });
-        if (transcript) segments = transcript.segments;
-        else segments = [{ text: "No content", speaker: "System", start: 0, end: 0 }];
+      // Retrieval for transcript-only jobs
+      const transcript = await Transcript.findOne({ meetingId });
+      if (transcript) segments = transcript.segments;
+      else segments = [{ text: "No content", speaker: "System", start: 0, end: 0 }];
     }
 
     // Step 4: Chunking for LLM
     updateJobStep(jobId, STEPS.CHUNKING);
     await updateMeetingStatus(meetingId, 'chunking');
-    const transcriptForVectors = await Transcript.findOne({ meetingId });
-    if (transcriptForVectors) {
-      await vectorService.indexTranscript({ meeting, transcript: transcriptForVectors });
-      console.log(`[Processor] Indexed transcript chunks for meeting: ${meetingId}`);
-    }
     const chunks = chunkingService.chunkTranscript(segments);
     console.log(`[Processor] 📦 Created ${chunks.length} chunks`);
 
@@ -125,7 +120,7 @@ const processJob = async (jobId, meetingId, audioPath, type = 'audio') => {
 
     const chunkExtractions = [];
     for (let i = 0; i < chunks.length; i++) {
-        // Pass the full chunk object
+      // Pass the full chunk object
       const extraction = await llmService.extractFromChunk(chunks[i]);
       chunkExtractions.push(extraction);
 
@@ -139,17 +134,41 @@ const processJob = async (jobId, meetingId, audioPath, type = 'audio') => {
     await updateMeetingStatus(meetingId, 'merging');
     const mergedResult = await llmService.mergeExtractions(chunkExtractions);
 
-    // Step 7: Save summary to MongoDB (raw LLM format)
+    // Map raw LLM output → Summary schema field names
+    // Schema uses: assignee.name, urgency_reasoning, due_date, suggested_schedule_action
+    const rawTasks = mergedResult.tasks || [];
+    const actionItems = rawTasks.map((task) => ({
+      task_id: task.task_id || undefined,
+      title: task.title || 'Untitled Task',
+      description: task.description || '',
+      assigner: { name: task.assigner?.name || 'Unknown' },
+      assignee: {
+        name: task.assignee?.name || 'Unassigned',
+        disambiguation: task.assignee?.disambiguation || undefined
+      },
+      priority: task.priority || 'unknown',
+      urgency_reasoning: task.urgency_reasoning || null,
+      due_date: task.due_date || null,
+      suggested_schedule_action: task.suggested_schedule_action || 'manual',
+      status: task.status || 'proposed',
+      evidence: task.evidence || [],
+      confidence: task.confidence != null ? task.confidence : 0.8,
+      notes: task.notes || null,
+      confirmed: false
+    }));
+    console.log(`[Processor] 🧾 Mapped ${actionItems.length} action items from LLM`);
+
+    // Step 7: Save summary to MongoDB
     updateJobStep(jobId, STEPS.SAVING_SUMMARY);
     await Summary.findOneAndUpdate(
       { meetingId },
       {
         organizationId,
         meetingId,
-        executive: mergedResult.summary,  // Raw 'summary' -> stored as 'executive'
+        executive: mergedResult.summary || '',
         topics: [],
         decisions: [],
-        actionItems: mergedResult.tasks,  // Raw 'tasks' array
+        actionItems,
         chunkCount: chunks.length,
         extractionModel: 'llama-3.3-70b-versatile'
       },
@@ -159,6 +178,36 @@ const processJob = async (jobId, meetingId, audioPath, type = 'audio') => {
     // Done!
     updateJobStep(jobId, STEPS.DONE);
     await updateMeetingStatus(meetingId, 'done');
+
+    // Step 8 (background): Index transcript into Python RAG pipeline (Gemini embeddings + Pinecone)
+    // This runs after the job is marked done so it doesn't block the user
+    const botPort = process.env.BOT_PORT || 5001;
+    fetch(`http://127.0.0.1:${botPort}/process-transcript`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        meet_id: meetingId.toString(),
+        org_id: organizationId.toString(),
+        meet_title: meeting.title || 'Untitled',
+        segments: segments
+      })
+    }).then(async (res) => {
+      if (res.ok) {
+        const data = await res.json();
+        console.log(`[Processor] ✅ Python RAG pipeline indexed ${data.chunk_count || 0} chunks in '${data.index_name}'`);
+        await Meeting.findByIdAndUpdate(meetingId, {
+          vectorStatus: 'indexed',
+          vectorIndexName: data.index_name,
+          vectorChunkCount: data.chunk_count || 0
+        });
+      } else {
+        const err = await res.text();
+        console.warn(`[Processor] ⚠️ Python RAG pipeline returned ${res.status}: ${err}`);
+      }
+    }).catch((err) => {
+      console.warn(`[Processor] ⚠️ Could not reach Python RAG pipeline: ${err.message}`);
+    });
+
     console.log(`[Processor] ✅ Job completed: ${jobId}`);
 
   } catch (error) {

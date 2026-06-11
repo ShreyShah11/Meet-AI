@@ -51,6 +51,22 @@ const actionItemSchema = new mongoose.Schema({
     default: 0.8
   },
   notes: String,
+  assignedTeamMemberId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'TeamMember'
+  },
+  atlassianEmail: String,
+  googleEmail: String,
+  slackUserId: String,
+  slackDisplayName: String,
+  slackMention: String,
+  assigneeMapping: {
+    name: String,
+    atlassianEmail: String,
+    googleEmail: String,
+    slackUserId: String,
+    slackMention: String
+  },
   confirmed: { type: Boolean, default: false }
 }, { _id: true });
 

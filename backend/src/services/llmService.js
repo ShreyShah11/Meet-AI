@@ -50,7 +50,7 @@ A task is ANY of the following:
 - Explicit assignment ("X, do this")
 - Implicit assignment ("you do this")
 - Open action item ("we should", "someone should")
-- Follow‑up ("check", "investigate", "schedule", "notify")
+- Follow-up ("check", "investigate", "schedule", "notify")
 - Engineering work
 - Scheduling a meeting
 - Creating tickets / Slack alerts
@@ -113,7 +113,7 @@ Detect phrases like:
 - "remove from sprint"
 - "no action needed"
 - "park this"
-- "we’ll revisit later"
+- "we'll revisit later"
 
 If a task is cancelled:
 - status = cancelled
@@ -122,7 +122,7 @@ If a task is cancelled:
 - Keep original assignment if known
 
 Example:
-"Let’s drop mobile push notifications for this sprint"
+"Let's drop mobile push notifications for this sprint"
 → task.status = cancelled
 
 --------------------------------------------------
@@ -147,7 +147,7 @@ HIGH:
 - "ASAP"
 - "by EOD"
 - urgent but not total outage
-- user‑visible bugs
+- user-visible bugs
 
 Examples:
 "Please fix ASAP"
@@ -155,7 +155,7 @@ Examples:
 → high
 
 MEDIUM:
-- due in 2–7 days
+- due in 2-7 days
 - "this sprint"
 - important but not blocking
 
@@ -193,7 +193,7 @@ Examples:
 If unclear → due_date = null
 
 --------------------------------------------------
-CROSS‑DISCUSSION / DEDUPLICATION RULES:
+CROSS-DISCUSSION / DEDUPLICATION RULES:
 
 A task may:
 - be mentioned early
@@ -212,7 +212,7 @@ Example:
 --------------------------------------------------
 EVIDENCE RULES (MANDATORY):
 
-Each task MUST include 1–3 verbatim snippets:
+Each task MUST include 1-3 verbatim snippets:
 - exact words
 - speaker name
 - timestamp
@@ -226,11 +226,11 @@ Evidence should justify:
 --------------------------------------------------
 CONFIDENCE RULES:
 
-1.00 – Explicit assignment + confirmation
-0.85 – Clear assignment, no conflict
-0.65 – Implicit or inferred
-0.40 – Multiple candidates
-<0.40 – Weak / unclear
+1.00 - Explicit assignment + confirmation
+0.85 - Clear assignment, no conflict
+0.65 - Implicit or inferred
+0.40 - Multiple candidates
+<0.40 - Weak / unclear
 
 --------------------------------------------------
 TASK TYPE / ACTION RULES (IMPORTANT - classify carefully):
@@ -270,7 +270,7 @@ Determine suggested_schedule_action based on the NATURE of the task:
 OUTPUT FORMAT (STRICT JSON):
 
 {
-  "summary": "2–6 sentence meeting summary",
+  "summary": "2-6 sentence meeting summary",
   "tasks": [
     {
       "task_id": "T1",
@@ -313,22 +313,22 @@ OUTPUT FORMAT (STRICT JSON):
 
 class LLMService {
   constructor() {
-    this.provider = 'groq'; // Default to Groq as requested
+    this.provider = 'groq'; // Default to Groq
 
     // Initialize Groq client
-    // HARDCODED FALLBACK FOR DEBUGGING
-    const apiKey = process.env.GROQ_API_KEY || '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';
+    const apiKey = process.env.GROQ_API_KEY || process.env.LLM_API_KEY;
 
     if (apiKey) {
-        console.log(`[LLM] Provider set to GROQ. Key available (Length: ${apiKey.length})`);
-        this.model = new ChatGroq({
-            apiKey: apiKey,
-            model: "llama-3.3-70b-versatile",
-            temperature: 0
-        });
+      console.log(`[LLM] Provider set to GROQ. Key available (Length: ${apiKey.length})`);
+      this.model = new ChatGroq({
+        apiKey: apiKey,
+        model: 'llama-3.3-70b-versatile',
+        temperature: 0,
+        maxTokens: 8192
+      });
     } else {
-        console.warn("[LLM] ⚠️ GROQ_API_KEY is missing/undefined. Falling back to dummy mode.");
-        this.provider = 'dummy';
+      console.warn('[LLM] ⚠️ GROQ_API_KEY is missing/undefined. Falling back to dummy mode.');
+      this.provider = 'dummy';
     }
   }
 
@@ -344,37 +344,46 @@ class LLMService {
     }
 
     try {
-        return await this.extractWithGroq(chunk);
+      return await this.extractWithGroq(chunk);
     } catch (error) {
-        console.error('[LLM] Groq extraction failed:', error);
-        throw error;
+      console.error('[LLM] Groq extraction failed:', error);
+      throw error;
     }
   }
 
   /**
-   * Merge chunk extractions (Pass 2) - Returns raw LLM format
+   * Merge chunk extractions (Pass 2)
+   * Always returns { summary, tasks } regardless of Groq or dummy mode.
    */
   async mergeExtractions(chunkExtractions) {
     console.log(`[LLM] Merging ${chunkExtractions.length} extractions`);
 
     if (chunkExtractions.length === 1) {
-        // Return raw LLM output directly
-        return chunkExtractions[0];
+      const single = chunkExtractions[0];
+      // Groq returns { summary, tasks } — dummy returns { summary, tasks } (after our fix)
+      // Keep fallback to actionItems just in case
+      return {
+        summary: single.summary || '',
+        tasks: single.tasks || single.actionItems || []
+      };
     }
 
-    // Simple Merge for multiple chunks (concat tasks)
+    // Multiple chunks: collect all tasks
     let mergedTasks = [];
-    let summary = "";
+    let summary = '';
 
     for (const extraction of chunkExtractions) {
-        if (extraction.tasks) mergedTasks.push(...extraction.tasks);
-        if (!summary && extraction.summary) summary = extraction.summary;
+      const tasks = extraction.tasks || extraction.actionItems || [];
+      mergedTasks.push(...tasks);
+      if (!summary && extraction.summary) summary = extraction.summary;
     }
 
-    // Return raw merged format
     return { summary, tasks: mergedTasks };
   }
 
+  /**
+   * Answer a question from retrieved context chunks (used by chatWithMeeting)
+   */
   async answerFromRetrievedContext(question, retrievedChunks = []) {
     const context = retrievedChunks
       .filter((chunk) => chunk.text)
@@ -395,7 +404,11 @@ class LLMService {
     }
 
     const messages = [
-      new SystemMessage('Answer questions using only the provided meeting transcript context. If the context does not contain the answer, say that clearly. Keep the answer concise and cite timestamps when available.'),
+      new SystemMessage(
+        'Answer questions using only the provided meeting transcript context. ' +
+        'If the context does not contain the answer, say that clearly. ' +
+        'Keep the answer concise and cite timestamps when available.'
+      ),
       new HumanMessage(`Question: ${question}\n\nTranscript context:\n${context}`)
     ];
 
@@ -404,105 +417,100 @@ class LLMService {
   }
 
   /**
-   * Execute Groq extraction
+   * Execute Groq extraction on a chunk
    */
-    async extractWithGroq(chunk) {
-        // Format transcript segments as per prompt expectation
-        // Chunking service provides 'blocks', not 'segments'
-        const formattedTranscript = this.formatTranscriptForLLM(chunk.blocks || []);
+  async extractWithGroq(chunk) {
+    // Format transcript segments — chunkingService provides 'blocks'
+    const formattedTranscript = this.formatTranscriptForLLM(chunk.blocks || []);
 
-        // Prepare metadata
-        const metadata = {
-            MEETING_DATE: new Date().toLocaleDateString(),
-            TIMEZONE: Intl.DateTimeFormat().resolvedOptions().timeZone
-        };
+    const metadata = {
+      MEETING_DATE: new Date().toLocaleDateString(),
+      TIMEZONE: Intl.DateTimeFormat().resolvedOptions().timeZone
+    };
 
-        // Inject metadata into system prompt
-        const activeSystemPrompt = SYSTEM_PROMPT
-            .replace('{{MEETING_DATE}}', metadata.MEETING_DATE)
-            .replace('{{TIMEZONE}}', metadata.TIMEZONE);
+    const activeSystemPrompt = SYSTEM_PROMPT
+      .replace('{{MEETING_DATE}}', metadata.MEETING_DATE)
+      .replace('{{TIMEZONE}}', metadata.TIMEZONE);
 
-        const messages = [
-            new SystemMessage(activeSystemPrompt),
-            new HumanMessage(
-                `Give me the summary and the task assigned (Person name who is assigned the task, task description and dedline for the task) for the below given transcript of a online meeting.\n\n${formattedTranscript}`
-            )
-        ];
+    const messages = [
+      new SystemMessage(activeSystemPrompt),
+      new HumanMessage(
+        `Give me the summary and the task assigned (Person name who is assigned the task, task description and deadline for the task) for the below given transcript of an online meeting.\n\n${formattedTranscript}`
+      )
+    ];
 
-        console.log('[LLM] Sending request to Groq...');
-        const response = await this.model.invoke(messages);
+    console.log('[LLM] Sending request to Groq...');
+    const response = await this.model.invoke(messages);
 
-        try {
-            // Parse JSON response
-            const content = response.content.trim();
-            const jsonStart = content.indexOf('{');
-            const jsonEnd = content.lastIndexOf('}');
+    try {
+      return this.parseJsonResponse(response.content);
+    } catch (e) {
+      console.error('[LLM] Failed to parse output:', response.content?.slice(0, 4000));
+      throw new Error('Failed to parse LLM response as JSON');
+    }
+  }
 
-            if (jsonStart !== -1 && jsonEnd !== -1) {
-                const jsonStr = content.substring(jsonStart, jsonEnd + 1);
-                return JSON.parse(jsonStr);
-            }
+  /**
+   * Parse a JSON response from the LLM (handles markdown code fences)
+   */
+  parseJsonResponse(content = '') {
+    const cleaned = String(content)
+      .trim()
+      .replace(/^```(?:json)?/i, '')
+      .replace(/```$/i, '')
+      .trim();
 
-            throw new Error("No JSON found in response");
-        } catch (e) {
-            console.error("[LLM] Failed to parse output:", response.content);
-            throw new Error("Failed to parse LLM response as JSON");
-        }
+    try {
+      return JSON.parse(cleaned);
+    } catch {
+      // Fall through to balanced-object extraction
     }
 
-    /**
-     * Format transcript segments for LLM
-     */
-    formatTranscriptForLLM(segments) {
-        if (!segments || segments.length === 0) return "";
-
-        return segments.map(seg => {
-            const time = this.formatTime(seg.start);
-            return `[${time}] ${seg.speaker}: ${seg.text}`;
-        }).join('\n\n');
+    const start = cleaned.indexOf('{');
+    if (start === -1) {
+      throw new Error('No JSON object found in response');
     }
 
-    /**
-     * Normalize LLM output to Schema format
-     */
-    normalizeLLMOutput(llmResult) {
-        const tasks = llmResult.tasks || [];
+    let depth = 0;
+    let inString = false;
+    let escaped = false;
 
-        const actionItems = tasks.map((task, idx) => ({
-            id: idx + 1,
-            title: task.title,
-            description: task.description,
-            owner: task.assignee?.name !== 'unknown' ? task.assignee?.name : 'Unassigned',
-            assigner: task.assigner?.name || 'Unknown',
-            priority: task.priority ? task.priority.charAt(0).toUpperCase() + task.priority.slice(1) : 'Medium',
-            urgencyReasoning: task.urgency_reasoning || null,
-            dueDate: task.due_date,
-            suggestedAction: task.suggested_schedule_action || 'manual',
-            status: task.status || 'proposed',
-            confidence: Math.round((task.confidence || 0.8) * 100),
-            evidence: task.evidence || [],
-            notes: task.notes || null,
-            confirmed: false
-        }));
+    for (let index = start; index < cleaned.length; index += 1) {
+      const char = cleaned[index];
 
-        return {
-            executive: llmResult.summary,
-            topics: [],
-            decisions: [],
-            actionItems,
-            chunkCount: 1,
-            extractionModel: 'llama-3.3-70b-versatile'
-        };
+      if (escaped) { escaped = false; continue; }
+      if (char === '\\') { escaped = true; continue; }
+      if (char === '"') { inString = !inString; continue; }
+      if (inString) continue;
+
+      if (char === '{') depth += 1;
+      if (char === '}') depth -= 1;
+
+      if (depth === 0) {
+        return JSON.parse(cleaned.slice(start, index + 1));
+      }
     }
+
+    throw new Error('JSON object was incomplete');
+  }
+
+  /**
+   * Format transcript blocks for LLM prompt
+   */
+  formatTranscriptForLLM(segments) {
+    if (!segments || segments.length === 0) return '';
+    return segments.map(seg => {
+      const time = this.formatTime(seg.start || 0);
+      return `[${time}] ${seg.speaker}: ${seg.text}`;
+    }).join('\n\n');
+  }
 
   /**
    * DUMMY: Generate mock extraction for a chunk
+   * Returns same { summary, tasks } shape as Groq for consistency.
    */
   dummyChunkExtraction(chunk) {
     const topics = [];
-    const decisions = [];
-    const actionItems = [];
-
     const text = chunk.text.toLowerCase();
 
     if (text.includes('q4')) topics.push('Q4 Planning');
@@ -512,52 +520,8 @@ class LLMService {
     return {
       chunkIndex: chunk.index,
       summary: `Discussion covering ${topics.join(', ') || 'various topics'}`,
-      topics,
-      decisions,
-      actionItems
+      tasks: []  // Empty tasks — Groq would populate this
     };
-  }
-
-  /**
-   * DUMMY: Merge all chunk extractions
-   */
-  dummyMerge(chunkExtractions) {
-    const allTopics = new Set();
-    const allDecisions = [];
-    const allActionItems = [];
-
-    for (const extraction of chunkExtractions) {
-      extraction.topics?.forEach(t => allTopics.add(t));
-      allDecisions.push(...(extraction.decisions || []));
-      allActionItems.push(...(extraction.actionItems || []));
-    }
-
-    if (allActionItems.length === 0) {
-          allActionItems.push(
-            { title: 'Lead onboarding flow redesign', description: 'Create detailed roadmap', owner: 'Sarah Miller', priority: 'High', dueDate: this.getDueDate(7), confidence: 95 },
-            { title: 'Start mobile app development', description: 'Begin engineering work', owner: 'Mike Johnson', priority: 'High', dueDate: this.getDueDate(3), confidence: 92 }
-          );
-    }
-
-    return {
-      executive: `The Q4 planning meeting covered ${allTopics.size} main topics: ${[...allTopics].join(', ')}.`,
-      topics: [...allTopics],
-      decisions: [...new Set(allDecisions)],
-      actionItems: this.deduplicateActionItems(allActionItems),
-      chunkCount: chunkExtractions.length,
-      extractionModel: 'dummy'
-    };
-  }
-
-  deduplicateActionItems(items) {
-    const seen = new Map();
-    for (const item of items) {
-      const key = item.title.toLowerCase().slice(0, 20);
-      if (!seen.has(key)) {
-        seen.set(key, { ...item, id: seen.size + 1, dueDate: item.dueDate || this.getDueDate(7 + seen.size * 3) });
-      }
-    }
-    return [...seen.values()];
   }
 
   getDueDate(daysFromNow) {

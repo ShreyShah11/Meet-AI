@@ -293,6 +293,34 @@ class VectorService {
       'Content-Type': 'application/json'
     };
   }
+
+  async answerWithGemini(question, context) {
+    const geminiApiKey = process.env.GEMINI_API_KEY;
+    if (!geminiApiKey) {
+      throw new Error('GEMINI_API_KEY is not configured');
+    }
+
+    const model = process.env.GEMINI_MODEL || 'gemini-1.5-flash';
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
+
+    const prompt = `You are a helpful assistant answering questions about a meeting.\nUse the provided transcript context to answer the user's question.\nIf the answer is not contained in the context, politely say so.\n\nContext:\n${context}\n\nQuestion:\n${question}\n\nAnswer:`;
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': geminiApiKey },
+      body: JSON.stringify({
+        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+        generationConfig: { temperature: 0.3, maxOutputTokens: 1024 }
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error(`Gemini API error: ${response.status} ${await response.text()}`);
+    }
+
+    const data = await response.json();
+    return data.candidates?.[0]?.content?.parts?.[0]?.text || 'No answer generated.';
+  }
 }
 
 export const vectorService = new VectorService();
