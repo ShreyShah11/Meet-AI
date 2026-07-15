@@ -8,15 +8,18 @@ const __dirname = path.dirname(__filename);
 
 let pythonProcess = null;
 
-export const startBotService = (port = 5001) => {
+// On Linux/Render, use 'python3'. On Windows dev, try 'python' first.
+const PYTHON_CMD = process.platform === 'win32' ? 'python' : 'python3';
+
+export const startBotService = (port = process.env.BOT_PORT || 5001) => {
     const pythonScriptPath = path.join(__dirname, 'bot_runner.py');
 
     console.log(`[BotService] Starting Python service on port ${port}...`);
     console.log(`[BotService] Script: ${pythonScriptPath}`);
+    console.log(`[BotService] Using Python command: ${PYTHON_CMD}`);
 
     // Spawn the python process
-    // Assuming 'python' is in the PATH. If not, might need specific path or 'python3'
-    pythonProcess = spawn('python', ['-u', pythonScriptPath], {
+    pythonProcess = spawn(PYTHON_CMD, ['-u', pythonScriptPath], {
         env: { ...process.env, BOT_PORT: port.toString(), PYTHONIOENCODING: 'utf-8' },
         cwd: path.join(__dirname, '../') // Set CWD to backend root so imports work
     });

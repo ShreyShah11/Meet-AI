@@ -1,7 +1,6 @@
 flask
 requests
 flask-cors
-numpy
 pinecone
-sentence-transformers
 python-dotenv
+google-generativeai

@@ -22,22 +22,38 @@ const app = express();
 // MIDDLEWARE
 // ========================================
 
-// CORS
+// CORS — allow localhost in dev, Vercel URL in prod, or both
+const allowedOrigins = [
+  /^http:\/\/localhost:\d+$/,   // always allow local dev
+];
+if (config.frontendUrl && config.frontendUrl !== 'http://localhost:5173') {
+  allowedOrigins.push(config.frontendUrl);
+}
+
 app.use(cors({
-  origin: config.isDev ? /^http:\/\/localhost:\d+$/ : config.frontendUrl,
+  origin: (origin, callback) => {
+    // Allow requests with no origin (curl, Postman, server-to-server)
+    if (!origin) return callback(null, true);
+    const allowed = allowedOrigins.some(pattern =>
+      typeof pattern === 'string' ? pattern === origin : pattern.test(origin)
+    );
+    if (allowed) return callback(null, true);
+    return callback(new Error(`CORS: origin ${origin} not allowed`));
+  },
   credentials: true
 }));
 
 // Proxy to Python Bot Service
 // Must be before body parsers to ensure stream is not consumed
+const botPort = process.env.BOT_PORT || 5001;
 app.use('/api/bot', requireAuth, requireAdmin, createProxyMiddleware({
-  target: 'http://127.0.0.1:5001',
+  target: `http://127.0.0.1:${botPort}`,
   changeOrigin: true,
   pathRewrite: {
     '^/api/bot': '', // remove base path
   },
   onProxyReq: (proxyReq, req, res) => {
-    console.log(`[Proxy] forward: ${req.method} ${req.url} -> http://127.0.0.1:5001${proxyReq.path}`);
+    console.log(`[Proxy] forward: ${req.method} ${req.url} -> http://127.0.0.1:${botPort}${proxyReq.path}`);
     // Fix for body parser issue if it *was* already parsed (safety check)
     if (req.body && Object.keys(req.body).length > 0) {
       const bodyData = JSON.stringify(req.body);

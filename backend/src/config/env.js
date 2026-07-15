@@ -6,10 +6,15 @@ import dotenv from 'dotenv';
 import { fileURLToPath } from 'url';
 import { dirname, resolve } from 'path';
 
-// Load .env from the project root (one level above /backend)
+// Load .env file — try multiple locations to support dev and production layouts:
+//   1. Project root (../../.env relative to backend/src/config/)  ← local dev
+//   2. Same directory as this file (fallback)
+//   In production (Render), env vars are injected directly — dotenv is a no-op.
 const __dirname = dirname(fileURLToPath(import.meta.url));
-dotenv.config({ path: resolve(__dirname, '../../../.env') });
-
+const rootEnv = resolve(__dirname, '../../../.env');
+const localEnv = resolve(__dirname, '.env');
+dotenv.config({ path: rootEnv });
+dotenv.config({ path: localEnv }); // no-op if not found
 
 export const config = {
   // Server
@@ -20,7 +25,7 @@ export const config = {
   // MongoDB
   mongoUri: process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/meetflow',
 
-  // Redis
+  // Redis (not used — queue is in-memory)
   redis: {
     host: process.env.REDIS_HOST || 'localhost',
     port: parseInt(process.env.REDIS_PORT) || 6379,
@@ -31,20 +36,21 @@ export const config = {
 
   // Auth
   auth: {
-    jwtSecret: process.env.JWT_SECRET || 'meetflow-dev-secret-change-me',
+    jwtSecret: process.env.JWT_SECRET || 'meetflow-dev-secret-change-me-in-production',
     jwtExpiresInSeconds: parseInt(process.env.JWT_EXPIRES_IN_SECONDS) || 60 * 60 * 24 * 7
   },
 
-  // Gradio (transcription)
+  // Gradio (transcription — local only, skipped in production)
   gradioEndpoint: process.env.GRADIO_ENDPOINT || 'http://localhost:7860',
 
-  // LLM (for future)
+  // LLM (Groq)
   llm: {
     provider: process.env.LLM_PROVIDER || 'dummy',
-    apiKey: process.env.LLM_API_KEY || '',
+    apiKey: process.env.LLM_API_KEY || process.env.GROQ_API_KEY || '',
     model: process.env.LLM_MODEL || '',
   },
 
+  // Vector DB (Pinecone + Gemini)
   vectors: {
     pineconeApiKey: process.env.PINECONE_API_KEY || '',
     pineconeCloud: process.env.PINECONE_CLOUD || 'aws',

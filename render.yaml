@@ -1,0 +1,53 @@
+services:
+  - type: web
+    name: meetflow-api
+    runtime: node
+    region: oregon
+    plan: free
+    rootDir: backend
+    buildCommand: npm install && pip install -r requirements.txt
+    startCommand: node src/server.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 3001
+      - key: MONGODB_URI
+        sync: false   # Set this in Render dashboard
+      - key: FRONTEND_URL
+        sync: false   # Set to your Vercel URL e.g. https://meet-ai.vercel.app
+      - key: JWT_SECRET
+        sync: false   # Set a long random string in Render dashboard
+      - key: LLM_PROVIDER
+        value: groq
+      - key: LLM_MODEL
+        value: llama-3.3-70b-versatile
+      - key: LLM_API_KEY
+        sync: false   # Your Groq API key
+      - key: GROQ_API_KEY
+        sync: false   # Your Groq API key (same as LLM_API_KEY)
+      - key: ATTENDEE_API_KEY
+        sync: false   # Your attendee.dev API key
+      - key: ATTENDEE_API_BASE_URL
+        value: https://app.attendee.dev/api/v1
+      - key: BOT_PORT
+        value: 5001
+      - key: GEMINI_API_KEY
+        sync: false   # Your Gemini API key
+      - key: GEMINI_MODEL
+        value: gemini-2.5-flash
+      - key: GEMINI_EMBEDDING_MODEL
+        value: text-embedding-004
+      - key: GEMINI_EMBEDDING_DIMENSION
+        value: 768
+      - key: PINECONE_API_KEY
+        sync: false   # Your Pinecone API key
+      - key: PINECONE_CLOUD
+        value: aws
+      - key: PINECONE_REGION
+        value: us-east-1
+      - key: VECTOR_TOP_K
+        value: 5
+      # N8N webhook will silently fail in production (localhost-only)
+      - key: N8N_WEBHOOK_URL
+        value: http://localhost:5678/webhook-test/confirm-tasks
