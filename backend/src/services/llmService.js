@@ -322,7 +322,7 @@ class LLMService {
       console.log(`[LLM] Provider set to GROQ. Key available (Length: ${apiKey.length})`);
       this.model = new ChatGroq({
         apiKey: apiKey,
-        model: 'llama-3.3-70b-versatile',
+        model: process.env.LLM_MODEL || 'qwen/qwen3.8-27b',
         temperature: 0,
         maxTokens: 8192
       });

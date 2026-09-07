@@ -170,7 +170,7 @@ const processJob = async (jobId, meetingId, audioPath, type = 'audio') => {
         decisions: [],
         actionItems,
         chunkCount: chunks.length,
-        extractionModel: 'llama-3.3-70b-versatile'
+        extractionModel: process.env.LLM_MODEL || 'qwen/qwen3.8-27b'
       },
       { upsert: true, new: true }
     );
